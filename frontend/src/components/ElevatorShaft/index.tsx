@@ -10,99 +10,194 @@ const ElevatorShaft: React.FC = () => {
   const { elevators, config, floorRequests, actions } = useSimulation()
   const { selectedElevator, selectedFloor, setSelectedElevator, setSelectedFloor } = useUIStore()
 
-  // Calculate responsive dimensions
+  // Intelligent responsive calculations for scalability
   const dimensions = useMemo(() => {
-    const minFloorHeight = Math.max(40, Math.min(80, 800 / config.numFloors)) // Responsive floor height
-    const minElevatorWidth = Math.max(60, Math.min(100, 600 / config.numElevators)) // Responsive elevator width
-    const elevatorSpacing = 10
-    const floorIndicatorWidth = 120
+    // Base calculations that scale intelligently
+    const baseFloorHeight = 70
+    const baseElevatorWidth = 90
+    
+    // Scale down as numbers increase to maintain tidiness
+    const floorHeightScale = Math.max(0.6, 1 - (config.numFloors - 5) * 0.02)
+    const elevatorWidthScale = Math.max(0.7, 1 - (config.numElevators - 3) * 0.05)
+    
+    const floorHeight = Math.max(50, baseFloorHeight * floorHeightScale)
+    const elevatorWidth = Math.max(65, baseElevatorWidth * elevatorWidthScale)
+    
+    const shaftSpacing = Math.max(8, elevatorWidth * 0.15)
+    const sideMargin = 20
+    const floorIndicatorWidth = 140
+    
+    // Total dimensions
+    const shaftAreaWidth = (config.numElevators * elevatorWidth) + ((config.numElevators - 1) * shaftSpacing)
+    const totalWidth = shaftAreaWidth + floorIndicatorWidth + (sideMargin * 3)
+    const totalHeight = config.numFloors * floorHeight
     
     return {
-      floorHeight: minFloorHeight,
-      elevatorWidth: minElevatorWidth,
-      elevatorSpacing,
+      floorHeight,
+      elevatorWidth,
+      shaftSpacing,
+      sideMargin,
       floorIndicatorWidth,
-      totalWidth: (config.numElevators * (minElevatorWidth + elevatorSpacing)) + floorIndicatorWidth + 100,
-      totalHeight: config.numFloors * minFloorHeight
+      shaftAreaWidth,
+      totalWidth,
+      totalHeight,
+      // Calculated positions
+      shaftStartX: sideMargin,
+      floorIndicatorX: sideMargin + shaftAreaWidth + sideMargin
     }
   }, [config.numElevators, config.numFloors])
 
   return (
-    <div className="h-full bg-gradient-to-br from-slate-900 via-blue-900/20 to-slate-900">
-      <div className="p-4 h-full flex flex-col">
+    <div className="h-full bg-gradient-to-br from-slate-900 via-blue-900/10 to-slate-900">
+      <div className="p-6 h-full flex flex-col relative">
         {/* Header */}
-        <div className="mb-4 flex-shrink-0">
-          <h2 className="text-xl font-bold text-white mb-1">Elevator System Simulation</h2>
-          <p className="text-slate-400 text-sm">
-            {config.numElevators} Elevators • {config.numFloors} Floors
-          </p>
+        <div className="mb-6 flex-shrink-0 flex items-start justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-white mb-2">Elevator System Simulation</h2>
+            <div className="flex items-center gap-6 text-sm text-slate-400">
+              <span className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                {config.numElevators} Elevators
+              </span>
+              <span className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                {config.numFloors} Floors
+              </span>
+            </div>
+          </div>
+
+          {/* Legend - Positioned parallel to heading */}
+          <div className="bg-slate-800/90 backdrop-blur-md rounded-lg p-3 border border-slate-600/50 shadow-xl">
+            <h4 className="text-sm font-semibold text-white mb-2">Status</h4>
+            <div className="flex items-center gap-4 text-xs">
+              {[
+                { color: 'bg-green-500', label: 'Moving Up' },
+                { color: 'bg-blue-500', label: 'Moving Down' },
+                { color: 'bg-yellow-500', label: 'Loading' },
+                { color: 'bg-gray-500', label: 'Idle' },
+                { color: 'bg-red-500', label: 'Maintenance' }
+              ].map(({ color, label }) => (
+                <div key={label} className="flex items-center gap-1">
+                  <div className={`w-2.5 h-2.5 rounded-full ${color}`} />
+                  <span className="text-slate-300">{label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
-        {/* Scrollable Simulation Container */}
-        <div className="flex-1 bg-slate-800/30 backdrop-blur-sm rounded-lg border border-slate-700 overflow-hidden">
+        {/* Main Simulation Area */}
+        <div className="flex-1 bg-slate-800/20 backdrop-blur-sm rounded-xl border border-slate-700/50 overflow-hidden">
           <div className="h-full overflow-auto p-4">
             <div 
-              className="relative mx-auto bg-slate-900/50 rounded-lg border border-slate-700"
+              className="relative mx-auto bg-slate-900/30 rounded-xl border border-slate-600/30 shadow-2xl"
               style={{ 
                 width: `${dimensions.totalWidth}px`,
-                height: `${dimensions.totalHeight + 60}px`,
+                height: `${dimensions.totalHeight + 40}px`,
+                minWidth: '600px',
                 minHeight: '400px'
               }}
             >
-              {/* Floor Grid Lines */}
-              <div className="absolute inset-4">
-                {Array.from({ length: config.numFloors }, (_, i) => (
+              {/* Background Grid */}
+              <div className="absolute inset-0 overflow-hidden rounded-xl">
+                {/* Vertical grid lines for elevator shafts */}
+                {Array.from({ length: config.numElevators + 1 }, (_, i) => (
                   <div
-                    key={`grid-${i}`}
-                    className="absolute w-full border-b border-slate-600/20"
+                    key={`v-grid-${i}`}
+                    className="absolute top-0 bottom-0 w-px bg-slate-600/20"
                     style={{
-                      top: `${i * dimensions.floorHeight}px`,
-                      height: `${dimensions.floorHeight}px`
+                      left: `${dimensions.shaftStartX + (i * (dimensions.elevatorWidth + dimensions.shaftSpacing)) - dimensions.shaftSpacing/2}px`
+                    }}
+                  />
+                ))}
+                
+                {/* Horizontal grid lines for floors */}
+                {Array.from({ length: config.numFloors + 1 }, (_, i) => (
+                  <div
+                    key={`h-grid-${i}`}
+                    className="absolute left-0 right-0 h-px bg-slate-600/20"
+                    style={{
+                      top: `${20 + (i * dimensions.floorHeight)}px`
                     }}
                   />
                 ))}
               </div>
 
+              {/* Floor Numbers (Left Side) */}
+              <div className="absolute left-2 top-5" style={{ width: '15px' }}>
+                {Array.from({ length: config.numFloors }, (_, i) => {
+                  const floor = config.numFloors - i
+                  return (
+                    <div
+                      key={`floor-num-${floor}`}
+                      className="absolute flex items-center justify-center text-slate-400 font-medium text-xs"
+                      style={{
+                        top: `${i * dimensions.floorHeight + (dimensions.floorHeight - 20) / 2}px`,
+                        height: '20px',
+                        width: '15px'
+                      }}
+                    >
+                      {floor === 1 ? 'G' : floor}
+                    </div>
+                  )
+                })}
+              </div>
+
               {/* Elevator Shafts */}
-              {elevators.map((elevator, index) => (
-                <div
-                  key={`shaft-${elevator.id}`}
-                  className="absolute"
-                  style={{
-                    left: `${20 + index * (dimensions.elevatorWidth + dimensions.elevatorSpacing)}px`,
-                    top: '20px',
-                    width: `${dimensions.elevatorWidth}px`,
-                    height: `${dimensions.totalHeight}px`
-                  }}
-                >
-                  {/* Shaft Background */}
-                  <div className="absolute inset-0 bg-slate-800/30 border-l border-r border-slate-600/30 rounded-sm" />
-                  
-                  {/* Shaft Label */}
-                  <div 
-                    className="absolute -top-5 left-1/2 transform -translate-x-1/2 text-xs font-medium text-slate-400"
-                    style={{ fontSize: Math.max(10, Math.min(12, dimensions.elevatorWidth / 8)) }}
+              <div 
+                className="absolute top-5" 
+                style={{
+                  left: `${dimensions.shaftStartX}px`,
+                  width: `${dimensions.shaftAreaWidth}px`,
+                  height: `${dimensions.totalHeight}px`
+                }}
+              >
+                {elevators.map((elevator, index) => (
+                  <div
+                    key={`shaft-${elevator.id}`}
+                    className="absolute"
+                    style={{
+                      left: `${index * (dimensions.elevatorWidth + dimensions.shaftSpacing)}px`,
+                      top: '0px',
+                      width: `${dimensions.elevatorWidth}px`,
+                      height: `${dimensions.totalHeight}px`
+                    }}
                   >
-                    E{index + 1}
+                    {/* Shaft Background */}
+                    <div className="absolute inset-0 bg-slate-800/10 border-l border-r border-slate-600/20 rounded-sm" />
+                    
+                    {/* Shaft Header */}
+                    <div 
+                      className="absolute -top-8 left-0 right-0 text-center"
+                      style={{ height: '20px' }}
+                    >
+                      <div className="inline-flex items-center gap-1 px-2 py-1 bg-slate-700/80 backdrop-blur-sm rounded-md border border-slate-600">
+                        <div 
+                          className="w-2 h-2 rounded-full"
+                          style={{ backgroundColor: elevator.color || '#6b7280' }}
+                        />
+                        <span className="text-xs font-medium text-white">E{elevator.id + 1}</span>
+                      </div>
+                    </div>
+
+                    {/* Elevator Car */}
+                    <ElevatorCar
+                      elevator={elevator}
+                      totalFloors={config.numFloors}
+                      floorHeight={dimensions.floorHeight}
+                      elevatorWidth={dimensions.elevatorWidth}
+                      isSelected={selectedElevator === elevator.id}
+                      onClick={() => setSelectedElevator(selectedElevator === elevator.id ? null : elevator.id)}
+                    />
                   </div>
+                ))}
+              </div>
 
-                  {/* Elevator Car */}
-                  <ElevatorCar
-                    elevator={elevator}
-                    totalFloors={config.numFloors}
-                    floorHeight={dimensions.floorHeight}
-                    elevatorWidth={dimensions.elevatorWidth}
-                    isSelected={selectedElevator === elevator.id}
-                    onClick={() => setSelectedElevator(selectedElevator === elevator.id ? null : elevator.id)}
-                  />
-                </div>
-              ))}
-
-              {/* Floor Indicators - Right Side */}
+              {/* Floor Controls (Right Side) */}
               <div 
                 className="absolute top-5"
                 style={{
-                  right: '20px',
+                  left: `${dimensions.floorIndicatorX}px`,
                   width: `${dimensions.floorIndicatorWidth}px`,
                   height: `${dimensions.totalHeight}px`
                 }}
@@ -124,54 +219,72 @@ const ElevatorShaft: React.FC = () => {
                   )
                 })}
               </div>
-
-              {/* Legend - Top Right */}
-              <div className="absolute top-4 left-4 bg-slate-800/90 backdrop-blur-sm rounded-lg p-3 border border-slate-700 max-w-40">
-                <h4 className="text-xs font-medium text-white mb-2">Legend</h4>
-                <div className="space-y-1 text-xs">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-blue-500" />
-                    <span className="text-slate-300">Moving</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-green-500" />
-                    <span className="text-slate-300">Request</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-gray-500" />
-                    <span className="text-slate-300">Idle</span>
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
         </div>
 
-        {/* Selection Info */}
+        {/* Selection Info Panel */}
         {(selectedElevator !== null || selectedFloor !== null) && (
-          <div className="mt-3 p-3 bg-slate-800/50 backdrop-blur-sm rounded-lg border border-slate-700 flex-shrink-0">
-            {selectedElevator !== null && elevators[selectedElevator] && (
-              <div className="text-sm">
-                <h4 className="font-medium text-white mb-1">Elevator {selectedElevator + 1}</h4>
-                <div className="flex gap-4 text-slate-300">
-                  <span>Floor: <span className="text-white">{elevators[selectedElevator].currentFloor}</span></span>
-                  <span>State: <span className="text-white capitalize">{elevators[selectedElevator].state.replace('_', ' ')}</span></span>
-                  <span>Load: <span className="text-white">{elevators[selectedElevator].passengers.length}/{elevators[selectedElevator].capacity}</span></span>
+          <div className="mt-4 p-4 bg-slate-800/40 backdrop-blur-sm rounded-xl border border-slate-600/50 flex-shrink-0">
+            <div className="flex gap-8">
+              {selectedElevator !== null && elevators[selectedElevator] && (
+                <div className="flex-1">
+                  <h4 className="font-semibold text-white mb-3 flex items-center gap-2">
+                    <div 
+                      className="w-3 h-3 rounded-full"
+                      style={{ backgroundColor: elevators[selectedElevator].color || '#6b7280' }}
+                    />
+                    Elevator {selectedElevator + 1}
+                  </h4>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="text-slate-400">Current Floor:</span>
+                      <div className="text-white font-medium">{elevators[selectedElevator].currentFloor}</div>
+                    </div>
+                    <div>
+                      <span className="text-slate-400">Status:</span>
+                      <div className="text-white font-medium capitalize">
+                        {elevators[selectedElevator].state.replace('_', ' ')}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-slate-400">Capacity:</span>
+                      <div className="text-white font-medium">
+                        {elevators[selectedElevator].passengers?.length || 0}/{elevators[selectedElevator].capacity}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-slate-400">Queue:</span>
+                      <div className="text-white font-medium">
+                        {elevators[selectedElevator].requestQueue?.length || 0} requests
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            )}
-            
-            {selectedFloor !== null && (
-              <div className="text-sm">
-                <h4 className="font-medium text-white mb-1">Floor {selectedFloor}</h4>
-                <div className="flex gap-4 text-slate-300">
-                  <span>Type: <span className="text-white">
-                    {selectedFloor === 1 ? 'Lobby' : selectedFloor === config.numFloors ? 'Top' : 'Standard'}
-                  </span></span>
-                  <span>Requests: <span className="text-white">{floorRequests.filter(r => r.floor === selectedFloor).length}</span></span>
+              )}
+              
+              {selectedFloor !== null && (
+                <div className="flex-1">
+                  <h4 className="font-semibold text-white mb-3">Floor {selectedFloor}</h4>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="text-slate-400">Type:</span>
+                      <div className="text-white font-medium">
+                        {selectedFloor === 1 ? 'Ground Floor' : 
+                         selectedFloor === config.numFloors ? 'Top Floor' : 
+                         'Standard Floor'}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-slate-400">Active Requests:</span>
+                      <div className="text-white font-medium">
+                        {floorRequests.filter(r => r.floor === selectedFloor).length}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         )}
       </div>

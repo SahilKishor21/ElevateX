@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { subscribeWithSelector } from 'zustand/middleware'
 
 interface Elevator {
+  totalDistance: number
   id: number
   currentFloor: number
   targetFloor: number | null

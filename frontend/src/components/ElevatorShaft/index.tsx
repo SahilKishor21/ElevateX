@@ -1,182 +1,236 @@
 'use client'
 
-import React, { useMemo } from 'react'
-import ElevatorCar from './ElevatorCar'
-import FloorIndicator from './FloorIndicator'
+import React, { useState } from 'react'
+import { Play, Pause, RotateCcw, Users, Zap, Settings } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Slider } from '@/components/ui/slider'
+import { Label } from '@/components/ui/label'
 import { useSimulation } from '@/hooks/useSimulation'
-import { useUIStore } from '@/store/uiStore'
 
-const ElevatorShaft: React.FC = () => {
-  const { elevators, config, floorRequests, actions } = useSimulation()
-  const { selectedElevator, selectedFloor, setSelectedElevator, setSelectedFloor } = useUIStore()
-
-  // Calculate responsive dimensions
-  const dimensions = useMemo(() => {
-    const minFloorHeight = Math.max(40, Math.min(80, 800 / config.numFloors)) // Responsive floor height
-    const minElevatorWidth = Math.max(60, Math.min(100, 600 / config.numElevators)) // Responsive elevator width
-    const elevatorSpacing = 10
-    const floorIndicatorWidth = 120
-    
-    return {
-      floorHeight: minFloorHeight,
-      elevatorWidth: minElevatorWidth,
-      elevatorSpacing,
-      floorIndicatorWidth,
-      totalWidth: (config.numElevators * (minElevatorWidth + elevatorSpacing)) + floorIndicatorWidth + 100,
-      totalHeight: config.numFloors * minFloorHeight
-    }
-  }, [config.numElevators, config.numFloors])
+const ControlPanel: React.FC = () => {
+  const { isRunning, isConnected, actions } = useSimulation()
+  
+  // Control states
+  const [numElevators, setNumElevators] = useState(3)
+  const [numFloors, setNumFloors] = useState(15)
+  const [elevatorCapacity, setElevatorCapacity] = useState(8)
+  const [requestFrequency, setRequestFrequency] = useState(2)
+  const [simulationSpeed, setSimulationSpeed] = useState(1)
 
   return (
-    <div className="h-full bg-gradient-to-br from-slate-900 via-blue-900/20 to-slate-900">
-      <div className="p-4 h-full flex flex-col">
-        {/* Header */}
-        <div className="mb-4 flex-shrink-0">
-          <h2 className="text-xl font-bold text-white mb-1">Elevator System Simulation</h2>
-          <p className="text-slate-400 text-sm">
-            {config.numElevators} Elevators • {config.numFloors} Floors
-          </p>
+    <div className="p-4 h-full overflow-y-auto">
+      <h2 className="text-lg font-semibold text-white mb-4">Simulation Controls</h2>
+      
+      {/* Connection Status */}
+      <div className="mb-4 p-3 bg-slate-700/50 rounded-lg border border-slate-600">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
+            <span className="text-sm text-slate-300">
+              {isConnected ? 'Connected' : 'Disconnected'}
+            </span>
+          </div>
+          <div className="text-xs text-slate-400">
+            {isRunning ? 'Running' : 'Stopped'}
+          </div>
         </div>
+      </div>
+      
+      {/* Main Controls */}
+      <div className="space-y-3 mb-6">
+        <Button 
+          className="w-full bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+          onClick={isRunning ? actions.stop : actions.start}
+          disabled={!isConnected}
+        >
+          {isRunning ? (
+            <>
+              <Pause className="mr-2 h-4 w-4" />
+              Stop Simulation
+            </>
+          ) : (
+            <>
+              <Play className="mr-2 h-4 w-4" />
+              Start Simulation
+            </>
+          )}
+        </Button>
+        
+        <Button 
+          variant="outline" 
+          className="w-full border-slate-600 text-slate-300 hover:bg-slate-700"
+          onClick={actions.reset}
+          disabled={!isConnected}
+        >
+          <RotateCcw className="mr-2 h-4 w-4" />
+          Reset System
+        </Button>
+      </div>
 
-        {/* Scrollable Simulation Container */}
-        <div className="flex-1 bg-slate-800/30 backdrop-blur-sm rounded-lg border border-slate-700 overflow-hidden">
-          <div className="h-full overflow-auto p-4">
-            <div 
-              className="relative mx-auto bg-slate-900/50 rounded-lg border border-slate-700"
-              style={{ 
-                width: `${dimensions.totalWidth}px`,
-                height: `${dimensions.totalHeight + 60}px`,
-                minHeight: '400px'
-              }}
-            >
-              {/* Floor Grid Lines */}
-              <div className="absolute inset-4">
-                {Array.from({ length: config.numFloors }, (_, i) => (
-                  <div
-                    key={`grid-${i}`}
-                    className="absolute w-full border-b border-slate-600/20"
-                    style={{
-                      top: `${i * dimensions.floorHeight}px`,
-                      height: `${dimensions.floorHeight}px`
-                    }}
-                  />
-                ))}
-              </div>
-
-              {/* Elevator Shafts */}
-              {elevators.map((elevator, index) => (
-                <div
-                  key={`shaft-${elevator.id}`}
-                  className="absolute"
-                  style={{
-                    left: `${20 + index * (dimensions.elevatorWidth + dimensions.elevatorSpacing)}px`,
-                    top: '20px',
-                    width: `${dimensions.elevatorWidth}px`,
-                    height: `${dimensions.totalHeight}px`
-                  }}
-                >
-                  {/* Shaft Background */}
-                  <div className="absolute inset-0 bg-slate-800/30 border-l border-r border-slate-600/30 rounded-sm" />
-                  
-                  {/* Shaft Label */}
-                  <div 
-                    className="absolute -top-5 left-1/2 transform -translate-x-1/2 text-xs font-medium text-slate-400"
-                    style={{ fontSize: Math.max(10, Math.min(12, dimensions.elevatorWidth / 8)) }}
-                  >
-                    E{index + 1}
-                  </div>
-
-                  {/* Elevator Car */}
-                  <ElevatorCar
-                    elevator={elevator}
-                    totalFloors={config.numFloors}
-                    floorHeight={dimensions.floorHeight}
-                    elevatorWidth={dimensions.elevatorWidth}
-                    isSelected={selectedElevator === elevator.id}
-                    onClick={() => setSelectedElevator(selectedElevator === elevator.id ? null : elevator.id)}
-                  />
-                </div>
-              ))}
-
-              {/* Floor Indicators - Right Side */}
-              <div 
-                className="absolute top-5"
-                style={{
-                  right: '20px',
-                  width: `${dimensions.floorIndicatorWidth}px`,
-                  height: `${dimensions.totalHeight}px`
-                }}
-              >
-                {Array.from({ length: config.numFloors }, (_, i) => {
-                  const floor = config.numFloors - i
-                  return (
-                    <FloorIndicator
-                      key={`floor-${floor}`}
-                      floor={floor}
-                      totalFloors={config.numFloors}
-                      floorHeight={dimensions.floorHeight}
-                      requests={floorRequests}
-                      onFloorRequest={actions.addFloorCall}
-                      isSelected={selectedFloor === floor}
-                      onClick={() => setSelectedFloor(selectedFloor === floor ? null : floor)}
-                      position={i * dimensions.floorHeight}
-                    />
-                  )
-                })}
-              </div>
-
-              {/* Legend - Top Right */}
-              <div className="absolute top-4 left-4 bg-slate-800/90 backdrop-blur-sm rounded-lg p-3 border border-slate-700 max-w-40">
-                <h4 className="text-xs font-medium text-white mb-2">Legend</h4>
-                <div className="space-y-1 text-xs">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-blue-500" />
-                    <span className="text-slate-300">Moving</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-green-500" />
-                    <span className="text-slate-300">Request</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-gray-500" />
-                    <span className="text-slate-300">Idle</span>
-                  </div>
-                </div>
-              </div>
+      {/* System Parameters */}
+      <div className="bg-slate-700/50 rounded-lg p-4 mb-6 border border-slate-600">
+        <div className="flex items-center gap-2 mb-4">
+          <Settings className="h-4 w-4 text-slate-400" />
+          <h3 className="text-sm font-medium text-slate-300">System Parameters</h3>
+        </div>
+        
+        <div className="space-y-6">
+          {/* Number of Elevators */}
+          <div>
+            <Label className="text-sm text-slate-400 mb-2 block">
+              Number of Elevators: {numElevators}
+            </Label>
+            <Slider
+              value={[numElevators]}
+              onValueChange={(value) => setNumElevators(value[0])}
+              max={8}
+              min={1}
+              step={1}
+              disabled={isRunning}
+              className="w-full"
+            />
+            <div className="flex justify-between text-xs text-slate-500 mt-1">
+              <span>1</span>
+              <span>8</span>
+            </div>
+          </div>
+          
+          {/* Number of Floors */}
+          <div>
+            <Label className="text-sm text-slate-400 mb-2 block">
+              Number of Floors: {numFloors}
+            </Label>
+            <Slider
+              value={[numFloors]}
+              onValueChange={(value) => setNumFloors(value[0])}
+              max={50}
+              min={5}
+              step={1}
+              disabled={isRunning}
+              className="w-full"
+            />
+            <div className="flex justify-between text-xs text-slate-500 mt-1">
+              <span>5</span>
+              <span>50</span>
+            </div>
+          </div>
+          
+          {/* Elevator Capacity */}
+          <div>
+            <Label className="text-sm text-slate-400 mb-2 block">
+              Elevator Capacity: {elevatorCapacity} people
+            </Label>
+            <Slider
+              value={[elevatorCapacity]}
+              onValueChange={(value) => setElevatorCapacity(value[0])}
+              max={20}
+              min={4}
+              step={1}
+              disabled={isRunning}
+              className="w-full"
+            />
+            <div className="flex justify-between text-xs text-slate-500 mt-1">
+              <span>4 people</span>
+              <span>20 people</span>
+            </div>
+          </div>
+          
+          {/* Request Frequency */}
+          <div>
+            <Label className="text-sm text-slate-400 mb-2 block">
+              Request Frequency: {requestFrequency} req/min
+            </Label>
+            <Slider
+              value={[requestFrequency]}
+              onValueChange={(value) => setRequestFrequency(value[0])}
+              max={10}
+              min={0.5}
+              step={0.5}
+              className="w-full"
+            />
+            <div className="flex justify-between text-xs text-slate-500 mt-1">
+              <span>0.5/min</span>
+              <span>10/min</span>
             </div>
           </div>
         </div>
-
-        {/* Selection Info */}
-        {(selectedElevator !== null || selectedFloor !== null) && (
-          <div className="mt-3 p-3 bg-slate-800/50 backdrop-blur-sm rounded-lg border border-slate-700 flex-shrink-0">
-            {selectedElevator !== null && elevators[selectedElevator] && (
-              <div className="text-sm">
-                <h4 className="font-medium text-white mb-1">Elevator {selectedElevator + 1}</h4>
-                <div className="flex gap-4 text-slate-300">
-                  <span>Floor: <span className="text-white">{elevators[selectedElevator].currentFloor}</span></span>
-                  <span>State: <span className="text-white capitalize">{elevators[selectedElevator].state.replace('_', ' ')}</span></span>
-                  <span>Load: <span className="text-white">{elevators[selectedElevator].passengers.length}/{elevators[selectedElevator].capacity}</span></span>
-                </div>
-              </div>
-            )}
-            
-            {selectedFloor !== null && (
-              <div className="text-sm">
-                <h4 className="font-medium text-white mb-1">Floor {selectedFloor}</h4>
-                <div className="flex gap-4 text-slate-300">
-                  <span>Type: <span className="text-white">
-                    {selectedFloor === 1 ? 'Lobby' : selectedFloor === config.numFloors ? 'Top' : 'Standard'}
-                  </span></span>
-                  <span>Requests: <span className="text-white">{floorRequests.filter(r => r.floor === selectedFloor).length}</span></span>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
       </div>
+
+      {/* Simulation Speed */}
+      <div className="mb-6">
+        <Label className="text-sm font-medium text-slate-300 mb-2 block">
+          Simulation Speed: {simulationSpeed}x
+        </Label>
+        <select 
+          className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:border-blue-500 focus:outline-none"
+          value={simulationSpeed}
+          onChange={(e) => setSimulationSpeed(Number(e.target.value))}
+        >
+          <option value="0.5">0.5x</option>
+          <option value="1">1x</option>
+          <option value="2">2x</option>
+          <option value="5">5x</option>
+          <option value="10">10x</option>
+        </select>
+      </div>
+
+      {/* Quick Actions */}
+      <div className="mb-6">
+        <Label className="text-sm font-medium text-slate-300 mb-3 block">Quick Actions</Label>
+        <div className="space-y-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="w-full border-slate-600 text-slate-300 hover:bg-slate-700 justify-start"
+            onClick={actions.generateRandomRequest}
+            disabled={!isConnected}
+          >
+            <Users className="mr-2 h-3 w-3" />
+            Add Random Request
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="w-full border-slate-600 text-slate-300 hover:bg-slate-700 justify-start"
+            onClick={actions.generatePeakTraffic}
+            disabled={!isConnected}
+          >
+            <Zap className="mr-2 h-3 w-3" />
+            Generate Peak Traffic
+          </Button>
+        </div>
+      </div>
+
+      {/* Configuration Summary */}
+      <div className="bg-slate-700/30 rounded-lg p-3 border border-slate-600">
+        <h4 className="text-sm font-medium text-slate-300 mb-2">Configuration Summary</h4>
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="text-slate-400">Total Capacity:</div>
+          <div className="text-white font-medium">{numElevators * elevatorCapacity} people</div>
+          <div className="text-slate-400">Max Throughput:</div>
+          <div className="text-white font-medium">~{Math.round(numElevators * elevatorCapacity * 2)}/hr</div>
+        </div>
+      </div>
+
+      {/* Status Warnings */}
+      {!isConnected && (
+        <div className="mt-4 p-3 bg-red-900/20 border border-red-800 rounded-lg">
+          <div className="flex items-center gap-2 text-red-400 text-sm">
+            <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+            Backend connection lost
+          </div>
+        </div>
+      )}
+
+      {isRunning && (
+        <div className="mt-4 p-3 bg-yellow-900/20 border border-yellow-800 rounded-lg">
+          <div className="text-yellow-400 text-sm">
+            Some parameters are locked while simulation is running
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
-export default ElevatorShaft
+export default ControlPanel

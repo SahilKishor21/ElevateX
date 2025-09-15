@@ -8,6 +8,7 @@ interface Elevator {
   state: string
   direction: string
   passengers: any[]
+  floorHeight: number
   capacity: number
   doorOpen: boolean
   requestQueue: number[]

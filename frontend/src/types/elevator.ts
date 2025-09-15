@@ -17,6 +17,7 @@ export interface Elevator {
   passengers: Passenger[]
   capacity: number
   doorOpen: boolean
+  floorHeight: number
   requestQueue: number[]
   lastMoveTime: number
   totalDistance: number

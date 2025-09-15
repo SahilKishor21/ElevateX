@@ -17,7 +17,6 @@ const ElevatorShaft: React.FC = () => {
     const elevatorSpacing = 10
     const floorIndicatorWidth = 120
     
-
     return {
       floorHeight: minFloorHeight,
       elevatorWidth: minElevatorWidth,

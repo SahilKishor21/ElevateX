@@ -2,11 +2,12 @@
 
 import { useEffect, useRef, useState } from 'react'
 import io from 'socket.io-client'
-import type { Socket } from 'socket.io-client'
 import { useElevatorStore } from '@/store/elevatorStore'
 
-export const useWebSocket = (url = ' https://elevatex-2ght.onrender.com') => {
-  const socketRef = useRef<Socket | null>(null)
+type SocketInstance = ReturnType<typeof io>
+
+export const useWebSocket = (url = 'https://elevatex-2ght.onrender.com') => {
+  const socketRef = useRef<SocketInstance | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const {

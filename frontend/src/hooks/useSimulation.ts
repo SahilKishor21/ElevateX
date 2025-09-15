@@ -12,7 +12,11 @@ export const useSimulation = () => {
     activeRequests,
     isRunning,
     isConnected,
+    isLoading,
+    systemStatus,
     updateConfig: updateStoreConfig,
+    setIsLoading,
+    setSystemStatus,
   } = useElevatorStore()
 
   const {
@@ -25,18 +29,24 @@ export const useSimulation = () => {
 
   const startSimulation = useCallback(() => {
     console.log('Starting simulation with config:', config)
+    setIsLoading(true)
     wsStart(config)
-  }, [wsStart, config])
+    setIsLoading(false)
+  }, [wsStart, config, setIsLoading])
 
   const stopSimulation = useCallback(() => {
     console.log('Stopping simulation')
+    setIsLoading(true)
     wsStop()
-  }, [wsStop])
+    setIsLoading(false)
+  }, [wsStop, setIsLoading])
 
   const resetSimulation = useCallback(() => {
     console.log('Resetting simulation')
+    setIsLoading(true)
     wsReset()
-  }, [wsReset])
+    setIsLoading(false)
+  }, [wsReset, setIsLoading])
 
   const addFloorCall = useCallback((floor: number, direction: 'up' | 'down') => {
     console.log(`Adding floor call: Floor ${floor}, Direction: ${direction}`)
@@ -104,6 +114,8 @@ export const useSimulation = () => {
     activeRequests,
     isRunning,
     isConnected,
+    isLoading,
+    systemStatus,
     actions: {
       start: startSimulation,
       stop: stopSimulation,
@@ -112,6 +124,8 @@ export const useSimulation = () => {
       generateRandomRequest,
       generatePeakTraffic,
       updateConfig: updateConfigAndSync,
+      setIsLoading,
+      setSystemStatus,
     }
   }
 }

@@ -29,6 +29,12 @@ interface ElevatorConfig {
   requestFrequency: number
 }
 
+interface SystemStatus {
+  activeElevators: number
+  utilizationRate: number
+  isHealthy: boolean
+}
+
 interface ElevatorStore {
   elevators: Elevator[]
   floorRequests: FloorRequest[]
@@ -37,7 +43,9 @@ interface ElevatorStore {
   isRunning: boolean
   currentTime: number
   isConnected: boolean
-  
+  isLoading: boolean
+  systemStatus: SystemStatus
+
   setElevators: (elevators: Elevator[]) => void
   setFloorRequests: (requests: FloorRequest[]) => void
   setActiveRequests: (requests: any[]) => void
@@ -45,6 +53,8 @@ interface ElevatorStore {
   setIsRunning: (running: boolean) => void
   setCurrentTime: (time: number) => void
   setIsConnected: (connected: boolean) => void
+  setIsLoading: (loading: boolean) => void
+  setSystemStatus: (status: Partial<SystemStatus>) => void
   resetSystem: () => void
 }
 
@@ -63,11 +73,17 @@ export const useElevatorStore = create<ElevatorStore>()(
     isRunning: false,
     currentTime: 0,
     isConnected: false,
+    isLoading: false,
+    systemStatus: {
+      activeElevators: 0,
+      utilizationRate: 0,
+      isHealthy: true,
+    },
 
     setElevators: (elevators) => set({ elevators }),
     setFloorRequests: (floorRequests) => set({ floorRequests }),
     setActiveRequests: (activeRequests) => set({ activeRequests }),
-    
+
     updateConfig: (updates) =>
       set((state) => ({
         config: { ...state.config, ...updates },
@@ -76,6 +92,11 @@ export const useElevatorStore = create<ElevatorStore>()(
     setIsRunning: (isRunning) => set({ isRunning }),
     setCurrentTime: (currentTime) => set({ currentTime }),
     setIsConnected: (isConnected) => set({ isConnected }),
+    setIsLoading: (isLoading) => set({ isLoading }),
+    setSystemStatus: (updates) =>
+      set((state) => ({
+        systemStatus: { ...state.systemStatus, ...updates },
+      })),
 
     resetSystem: () =>
       set({
@@ -84,6 +105,12 @@ export const useElevatorStore = create<ElevatorStore>()(
         activeRequests: [],
         isRunning: false,
         currentTime: 0,
+        isLoading: false,
+        systemStatus: {
+          activeElevators: 0,
+          utilizationRate: 0,
+          isHealthy: true,
+        },
       }),
   }))
 )

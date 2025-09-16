@@ -23,7 +23,7 @@ class PriorityCalculator {
   getTrafficBonus(request) {
     const hour = new Date().getHours()
     
-    // Morning rush: lobby to upper floors
+    // Morning rush: lobby to upper floors (PDF requirement)
     if (hour >= 8 && hour <= 10) {
       if (request.originFloor === 1 && request.destinationFloor > 5) {
         return 15
@@ -50,7 +50,6 @@ class PriorityCalculator {
 
   getTimeOfDayBonus(request) {
     const hour = new Date().getHours()
-    const minute = new Date().getMinutes()
     
     // Peak times get priority boost
     const peakHours = [8, 9, 12, 13, 17, 18]
@@ -58,7 +57,7 @@ class PriorityCalculator {
       return 3
     }
     
-    // Off-peak times (late night/early morning) get slight penalty
+    // Off-peak times get slight penalty
     if (hour < 6 || hour > 22) {
       return -2
     }
@@ -105,7 +104,6 @@ class PriorityCalculator {
     const capacityPenalty = this.getCapacityPenalty(elevator)
     const directionPenalty = this.getDirectionPenalty(elevator, request)
     
-    // Lower score is better
     return basePenalty + capacityPenalty + directionPenalty
   }
 }

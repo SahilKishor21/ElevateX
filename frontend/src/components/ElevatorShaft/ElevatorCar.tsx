@@ -1,246 +1,296 @@
-'use client'
-
 import React from 'react'
-import { ArrowUp, ArrowDown, Clock, Wrench, Users } from 'lucide-react'
+import { ArrowUp, ArrowDown, Users, Wrench, AlertCircle, AlertTriangle } from 'lucide-react'
+import { Elevator } from '@/types/elevator'
+import StatusBadge from '../Common/StatusBadge'
 import { cn } from '@/lib/utils'
+import { DEFAULT_CONFIG } from '@/lib/constants'
 
 interface ElevatorCarProps {
-  elevator: any
+  elevator: Elevator
   totalFloors: number
-  floorHeight: number
-  elevatorWidth: number
   isSelected?: boolean
   onClick?: () => void
+  animate?: boolean
 }
 
 const ElevatorCar: React.FC<ElevatorCarProps> = ({
   elevator,
   totalFloors,
-  floorHeight,
-  elevatorWidth,
   isSelected = false,
-  onClick
+  onClick,
+  animate = true
 }) => {
-  // Precise position calculation - elevator sits exactly on floor line
-  const calculatePosition = () => {
-    const floorFromTop = totalFloors - elevator.currentFloor
-    return floorFromTop * floorHeight + 2 // Small offset to sit on floor line
-  }
-
-  // Get passenger load
-  const currentLoad = elevator.passengers?.length || Math.floor(Math.random() * (elevator.capacity + 1))
-  const occupancyPercentage = (currentLoad / elevator.capacity) * 100
-
-  // Dynamic styling based on state
-  const getElevatorStyle = () => {
-    const baseStyle = {
-      borderColor: elevator.color || '#6b7280',
-      backgroundColor: 'rgba(30, 41, 59, 0.95)'
-    }
-
-    switch (elevator.state) {
-      case 'moving_up':
-        return { ...baseStyle, borderColor: '#22c55e', boxShadow: '0 0 20px rgba(34, 197, 94, 0.3)' }
-      case 'moving_down':
-        return { ...baseStyle, borderColor: '#3b82f6', boxShadow: '0 0 20px rgba(59, 130, 246, 0.3)' }
-      case 'maintenance':
-        return { ...baseStyle, borderColor: '#ef4444', boxShadow: '0 0 20px rgba(239, 68, 68, 0.3)' }
-      case 'loading':
-        return { ...baseStyle, borderColor: '#f59e0b', boxShadow: '0 0 20px rgba(245, 158, 11, 0.3)' }
-      default:
-        return baseStyle
-    }
-  }
-
   const getDirectionIcon = () => {
     switch (elevator.direction) {
       case 'up':
-        return <ArrowUp className="h-3 w-3 text-green-400" />
+        return <ArrowUp className="h-3 w-3" />
       case 'down':
-        return <ArrowDown className="h-3 w-3 text-blue-400" />
+        return <ArrowDown className="h-3 w-3" />
       default:
-        return <Clock className="h-3 w-3 text-gray-400" />
+        return null
     }
   }
 
-  const getLoadColor = () => {
-    if (occupancyPercentage > 80) return 'text-red-400'
-    if (occupancyPercentage > 60) return 'text-yellow-400'
-    return 'text-green-400'
+  const getStatusIcon = () => {
+    switch (elevator.state) {
+      case 'maintenance':
+        return <Wrench className="h-4 w-4" />
+      case 'loading':
+        return <Users className="h-4 w-4" />
+      default:
+        return null
+    }
   }
 
-  // Calculate responsive sizes
-  const elevatorHeight = Math.max(35, floorHeight - 8)
-  const headerHeight = Math.max(18, elevatorHeight * 0.25)
-  const passengerIconSize = Math.max(8, Math.min(12, elevatorWidth / 10))
+  const calculatePosition = () => {
+    const floorHeight = DEFAULT_CONFIG.FLOOR_HEIGHT
+    const position = (totalFloors - elevator.currentFloor) * floorHeight
+    return position
+  }
+
+  // Ensure we have valid data with defaults
+  const passengerCount = elevator.passengers?.length || 0
+  const elevatorCapacity = elevator.capacity || 8
+  const requestQueueLength = elevator.requestQueue?.length || 0
+  
+  const occupancyPercentage = elevatorCapacity > 0 ? (passengerCount / elevatorCapacity) * 100 : 0
+  const isNearCapacity = occupancyPercentage >= 80
+  const isAtCapacity = occupancyPercentage >= 95
+  const isOverCapacity = passengerCount > elevatorCapacity
 
   return (
     <div
       className={cn(
-        'absolute z-20 cursor-pointer transition-all duration-500 group',
-        isSelected && 'ring-2 ring-blue-400 ring-offset-2 ring-offset-slate-900/50'
+        'absolute left-2 z-10 cursor-pointer transition-all duration-300 group',
+        animate && 'animate-elevator-move',
+        isSelected && 'ring-2 ring-primary ring-offset-2'
       )}
       style={{
         top: `${calculatePosition()}px`,
-        left: '2px',
-        width: `${elevatorWidth - 4}px`,
-        height: `${elevatorHeight}px`,
+        width: `${DEFAULT_CONFIG.ELEVATOR_WIDTH}px`,
+        height: `${DEFAULT_CONFIG.FLOOR_HEIGHT - 10}px`,
       }}
       onClick={onClick}
     >
       <div
         className={cn(
-          'h-full w-full rounded-lg border-2 backdrop-blur-sm flex flex-col relative overflow-hidden shadow-xl transition-all duration-300 hover:scale-105',
-          elevator.doorOpen && 'animate-pulse'
+          'h-full w-full rounded-lg border-2 flex flex-col relative overflow-hidden shadow-lg transition-all duration-200 hover:shadow-xl',
+          elevator.doorOpen ? 'border-dashed' : 'border-solid',
+          elevator.state === 'maintenance' && 'opacity-75',
+          isSelected && 'scale-105',
+          isOverCapacity && 'border-red-500',
+          isAtCapacity && !isOverCapacity && 'border-orange-500',
+          isNearCapacity && !isAtCapacity && 'border-yellow-500'
         )}
-        style={getElevatorStyle()}
+        style={{
+          backgroundColor: isOverCapacity ? '#ef444420' : 
+                           isAtCapacity ? '#f9731620' : 
+                           isNearCapacity ? '#f59e0b20' : 
+                           (elevator.color || '#3b82f6') + '20',
+          borderColor: isOverCapacity ? '#ef4444' : 
+                      isAtCapacity ? '#f97316' : 
+                      isNearCapacity ? '#f59e0b' : 
+                      elevator.color || '#3b82f6',
+        }}
       >
-        {/* Header */}
-        <div 
-          className="flex items-center justify-between px-2 text-white border-b border-slate-600/50"
-          style={{ 
-            height: `${headerHeight}px`,
-            fontSize: `${Math.max(10, headerHeight * 0.6)}px`,
-            backgroundColor: 'rgba(51, 65, 85, 0.8)'
-          }}
-        >
+        {/* Capacity Warning Indicator */}
+        {(isNearCapacity || isAtCapacity || isOverCapacity) && (
+          <div className="absolute -top-2 -right-2 z-20">
+            <div className={cn(
+              "rounded-full p-1 animate-pulse",
+              isOverCapacity ? "bg-red-500" : 
+              isAtCapacity ? "bg-orange-500" : 
+              "bg-yellow-500"
+            )}>
+              <AlertTriangle className="h-3 w-3 text-white" />
+            </div>
+          </div>
+        )}
+
+        {/* Elevator Header */}
+        <div className="flex items-center justify-between p-2 bg-background/80 backdrop-blur-sm">
           <div className="flex items-center gap-1">
-            <span className="font-bold">E{elevator.id + 1}</span>
+            <span className="text-xs font-bold">E{elevator.id + 1}</span>
             {getDirectionIcon()}
           </div>
-          <span className="font-bold text-blue-300">{elevator.currentFloor}</span>
+          <div className="flex items-center gap-1">
+            {getStatusIcon()}
+            <span className="text-xs font-medium">{elevator.currentFloor}</span>
+          </div>
         </div>
 
-        {/* Body */}
-        <div className="flex-1 p-1.5 flex flex-col justify-between">
-          {/* Passenger visualization */}
-          <div className="flex-1 flex items-center justify-center">
-            {elevatorHeight > 40 ? (
-              // Grid layout for larger elevators
-              <div 
-                className="grid gap-0.5 w-full"
+        {/* Elevator Body with Capacity Display */}
+        <div className="flex-1 flex flex-col items-center justify-center relative p-1">
+          {/* Capacity Text Display */}
+          <div className="text-center mb-1">
+            <div className={cn(
+              "text-xs font-bold",
+              isOverCapacity ? "text-red-600" :
+              isAtCapacity ? "text-orange-600" :
+              isNearCapacity ? "text-yellow-600" :
+              "text-current"
+            )}>
+              {passengerCount}/{elevatorCapacity}
+            </div>
+          </div>
+
+          {/* Occupancy Visualization */}
+          <div className="flex flex-wrap gap-1 max-w-full justify-center mb-1">
+            {Array.from({ length: Math.min(passengerCount, 12) }, (_, i) => (
+              <div
+                key={i}
+                className={cn(
+                  "w-1.5 h-1.5 rounded-full",
+                  i >= elevatorCapacity ? "bg-red-500 animate-pulse" : "bg-current opacity-70"
+                )}
                 style={{ 
-                  gridTemplateColumns: `repeat(${Math.min(4, Math.ceil(Math.sqrt(elevator.capacity)))}, 1fr)`,
-                  gridTemplateRows: `repeat(${Math.ceil(elevator.capacity / Math.min(4, Math.ceil(Math.sqrt(elevator.capacity))))}, 1fr)`
+                  color: i >= elevatorCapacity ? '#ef4444' : elevator.color || '#3b82f6'
                 }}
-              >
-                {Array.from({ length: elevator.capacity }, (_, i) => (
-                  <div
-                    key={i}
-                    className={cn(
-                      "rounded-full border transition-all duration-300 flex items-center justify-center",
-                      i < currentLoad
-                        ? "bg-blue-500 border-blue-300"
-                        : "bg-slate-600/50 border-slate-500/50"
-                    )}
-                    style={{
-                      width: `${passengerIconSize}px`,
-                      height: `${passengerIconSize}px`
-                    }}
-                  >
-                    {i < currentLoad && (
-                      <Users style={{ width: `${passengerIconSize * 0.6}px`, height: `${passengerIconSize * 0.6}px` }} className="text-white" />
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              // Compact layout for smaller elevators
-              <div className="flex items-center justify-center gap-1">
-                <Users className="h-3 w-3 text-blue-400" />
-                <span className={cn("text-xs font-medium", getLoadColor())}>
-                  {currentLoad}/{elevator.capacity}
-                </span>
-              </div>
+              />
+            ))}
+            {passengerCount > 12 && (
+              <span className="text-xs text-muted-foreground">+{passengerCount - 12}</span>
             )}
           </div>
 
-          {/* Load indicator */}
-          {elevatorHeight > 40 && (
-            <div className="mt-1">
-              <div className="text-center mb-1">
-                <span className={cn("text-xs font-medium", getLoadColor())}>
-                  {currentLoad}/{elevator.capacity}
-                </span>
-              </div>
-              <div className="h-1 bg-slate-600/50 rounded-full overflow-hidden">
-                <div
-                  className={cn(
-                    "h-full transition-all duration-500 rounded-full",
-                    occupancyPercentage > 80 ? "bg-red-500" :
-                    occupancyPercentage > 60 ? "bg-yellow-500" : "bg-green-500"
-                  )}
-                  style={{ width: `${occupancyPercentage}%` }}
-                />
+          {/* Load Percentage */}
+          <div className="text-xs text-center">
+            <span className={cn(
+              "font-medium",
+              isOverCapacity ? "text-red-600" :
+              isAtCapacity ? "text-orange-600" :
+              isNearCapacity ? "text-yellow-600" :
+              "text-muted-foreground"
+            )}>
+              {Math.round(occupancyPercentage)}%
+            </span>
+          </div>
+
+          {/* Door Animation */}
+          {elevator.doorOpen && (
+            <div className="absolute inset-0 flex">
+              <div className="w-1/2 bg-background/90 border-r animate-slide-right" />
+              <div className="w-1/2 bg-background/90 border-l animate-slide-left" />
+            </div>
+          )}
+
+          {/* Overcapacity Warning Overlay */}
+          {isOverCapacity && (
+            <div className="absolute inset-0 bg-red-500/30 flex items-center justify-center">
+              <div className="text-center">
+                <AlertCircle className="h-4 w-4 text-red-600 animate-pulse mx-auto" />
+                <div className="text-xs font-bold text-red-600">OVER</div>
               </div>
             </div>
           )}
         </div>
 
-        {/* Door animation */}
-        {elevator.doorOpen && (
-          <div className="absolute inset-0 flex z-30">
-            <div className="w-1/2 bg-yellow-400/20 border-r-2 border-yellow-400 transform transition-transform duration-700 -translate-x-2/3" />
-            <div className="w-1/2 bg-yellow-400/20 border-l-2 border-yellow-400 transform transition-transform duration-700 translate-x-2/3" />
+        {/* Enhanced Footer with Capacity Bar */}
+        <div className="p-1 bg-background/60 backdrop-blur-sm">
+          <div className="h-1 bg-gray-200 rounded-full overflow-hidden">
+            <div
+              className={cn(
+                "h-full transition-all duration-300 rounded-full",
+                isOverCapacity ? "bg-red-600" :
+                isAtCapacity ? "bg-orange-500" :
+                isNearCapacity ? "bg-yellow-500" :
+                "bg-current"
+              )}
+              style={{
+                width: `${Math.min(100, occupancyPercentage)}%`,
+                backgroundColor: isOverCapacity ? '#dc2626' :
+                                isAtCapacity ? '#ea580c' :
+                                isNearCapacity ? '#d97706' :
+                                elevator.color || '#3b82f6',
+              }}
+            />
           </div>
-        )}
+        </div>
 
-        {/* Maintenance overlay */}
-        {elevator.state === 'maintenance' && (
-          <div className="absolute inset-0 bg-red-500/20 flex items-center justify-center z-40">
-            <Wrench className="h-4 w-4 text-red-400" />
-          </div>
-        )}
-
-        {/* Request queue indicator */}
-        {elevator.requestQueue?.length > 0 && (
-          <div className="absolute -top-1 -right-1 z-50">
-            <div className="w-4 h-4 bg-yellow-500 border border-yellow-300 rounded-full flex items-center justify-center shadow-lg">
-              <span className="text-xs font-bold text-black">{elevator.requestQueue.length}</span>
-            </div>
-          </div>
-        )}
-
-        {/* Movement indicator */}
+        {/* Movement Indicator */}
         {(elevator.state === 'moving_up' || elevator.state === 'moving_down') && (
-          <div className="absolute -left-1 top-1/2 transform -translate-y-1/2 z-30">
+          <div className="absolute -right-2 top-1/2 transform -translate-y-1/2">
             <div className={cn(
-              "w-1.5 h-6 rounded-full animate-pulse",
+              "w-1 h-6 rounded-full animate-pulse",
               elevator.direction === 'up' ? 'bg-green-500' : 'bg-blue-500'
             )} />
           </div>
         )}
+
+        {/* Request Queue Indicator */}
+        {requestQueueLength > 0 && (
+          <div className="absolute -left-1 top-2">
+            <div className="relative">
+              <div className="w-3 h-3 bg-yellow-500 rounded-full animate-bounce" />
+              <div className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full text-xs w-4 h-4 flex items-center justify-center">
+                {requestQueueLength}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Enhanced tooltip */}
-      <div className="absolute -right-40 top-0 hidden group-hover:block bg-slate-800/95 backdrop-blur-md border border-slate-600 rounded-lg p-3 shadow-2xl z-50 min-w-36">
-        <div className="space-y-1.5 text-xs">
-          <div className="font-bold text-white border-b border-slate-600 pb-1.5 mb-1.5">
+      {/* Enhanced Hover Tooltip with Full Details */}
+      <div className="absolute -right-32 top-0 hidden group-hover:block bg-background/95 backdrop-blur border rounded-lg p-3 shadow-lg z-50">
+        <div className="text-xs space-y-2 min-w-28">
+          <div className="font-semibold border-b pb-1">
             Elevator {elevator.id + 1}
           </div>
           
-          <div className="grid grid-cols-2 gap-2 text-slate-300">
-            <span>Floor:</span>
-            <span className="text-blue-300 font-medium">{elevator.currentFloor}</span>
-            
-            <span>Load:</span>
-            <span className={getLoadColor()}>{currentLoad}/{elevator.capacity}</span>
-            
-            <span>State:</span>
-            <span className="text-white capitalize">{elevator.state.replace('_', ' ')}</span>
-            
-            {elevator.direction && elevator.direction !== 'idle' && (
-              <>
-                <span>Direction:</span>
-                <span className="text-white capitalize">{elevator.direction}</span>
-              </>
-            )}
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <span className="text-muted-foreground">Floor:</span>
+              <span className="font-medium ml-1">{elevator.currentFloor}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Target:</span>
+              <span className="font-medium ml-1">{elevator.targetFloor || 'None'}</span>
+            </div>
           </div>
-          
-          {elevator.requestQueue?.length > 0 && (
-            <div className="pt-1.5 border-t border-slate-600">
-              <div className="text-slate-400">Queue:</div>
-              <div className="text-yellow-400 text-xs">{elevator.requestQueue.join(', ')}</div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div className="text-center">
+              <div className="font-medium">{passengerCount}/{elevatorCapacity} passengers</div>
+            </div>
+            <div className="text-center">
+              <div className="font-medium">{Math.round(occupancyPercentage)}% capacity</div>
+            </div>
+          </div>
+
+          <div>
+            <span className="text-muted-foreground">Status:</span>
+            <StatusBadge status={elevator.state} size="sm" className="ml-1" />
+          </div>
+
+          {requestQueueLength > 0 && (
+            <div>
+              <span className="text-muted-foreground">Queue:</span>
+              <div className="font-mono text-xs mt-1">
+                [{(elevator.requestQueue || []).slice(0, 5).join(', ')}
+                {requestQueueLength > 5 && '...'}]
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-2 pt-1 border-t">
+            <div><span className="text-muted-foreground">Trips:</span> {elevator.totalTrips || 0}</div>
+            <div><span className="text-muted-foreground">Distance:</span> {elevator.totalDistance || 0} floors</div>
+          </div>
+
+          {/* Capacity Status Warnings */}
+          {isOverCapacity && (
+            <div className="text-red-600 font-bold text-center">
+              ⚠️ OVERCAPACITY!
+            </div>
+          )}
+          {isAtCapacity && !isOverCapacity && (
+            <div className="text-orange-600 font-medium text-center">
+              AT CAPACITY
+            </div>
+          )}
+          {isNearCapacity && !isAtCapacity && (
+            <div className="text-yellow-600 font-medium text-center">
+              NEAR CAPACITY
             </div>
           )}
         </div>

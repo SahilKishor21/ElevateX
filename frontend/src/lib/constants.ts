@@ -50,6 +50,7 @@ export const WEBSOCKET_EVENTS = {
   SIMULATION_UPDATE: 'simulation_update',
   METRICS_UPDATE: 'metrics_update',
   CONFIG_CHANGE: 'config_change',
+  CONFIG_UPDATED: 'config_updated', // Add this line
   ADD_REQUEST: 'add_request',
   EMERGENCY_STOP: 'emergency_stop',
   START_SIMULATION: 'start_simulation',

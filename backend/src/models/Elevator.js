@@ -101,6 +101,28 @@ class Elevator {
     return false
   }
 
+  addSimulatedPassenger() {
+    if (this.passengers.length >= this.capacity) return false
+
+    const passenger = {
+      id: `passenger_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+      originFloor: this.currentFloor,
+      destinationFloor: Math.floor(Math.random() * 15) + 1,
+      boardTime: Date.now(),
+      waitTime: 0,
+      priority: 1
+    }
+
+    // Ensure destination is different from origin
+    while (passenger.destinationFloor === passenger.originFloor) {
+      passenger.destinationFloor = Math.floor(Math.random() * 15) + 1
+    }
+
+    this.passengers.push(passenger)
+    this.addRequest(passenger.destinationFloor)
+    return true
+  }
+
   removePassenger(passengerId) {
     const index = this.passengers.findIndex(p => p.id === passengerId)
     if (index !== -1) {

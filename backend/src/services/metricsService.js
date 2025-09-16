@@ -13,7 +13,6 @@ class MetricsService {
   update(elevators, activeRequests) {
     const now = Date.now()
     
-    // Calculate real-time metrics
     const servedRequests = this.requestHistory.filter(r => r.isServed)
     const waitTimes = servedRequests.map(r => r.waitTime).filter(t => t > 0)
     
@@ -23,16 +22,27 @@ class MetricsService {
       maxWaitTime: waitTimes.length > 0 ? Math.max(...waitTimes) : 0,
       elevatorUtilization: elevators.map(e => e.getUtilization()),
       activeRequests: activeRequests.length,
-      starvationCount: activeRequests.filter(r => r.isStarving()).length,
+      starvationCount: activeRequests.filter(r => typeof r.isStarving === 'function' && r.isStarving()).length,
       throughput: this.calculateThroughput(),
       systemLoad: this.calculateSystemLoad(elevators, activeRequests)
     }
 
     this.performanceHistory.push(metrics)
     
-    // Keep only last 100 entries
     if (this.performanceHistory.length > 100) {
       this.performanceHistory.shift()
+    }
+
+    // Add to historical data
+    const historicalEntry = {
+      timestamp: now,
+      metrics: this.getPerformanceMetrics(),
+      requests: activeRequests.length
+    }
+    
+    this.historicalData.push(historicalEntry)
+    if (this.historicalData.length > 50) {
+      this.historicalData.shift()
     }
   }
 
@@ -45,7 +55,7 @@ class MetricsService {
   calculateSystemLoad(elevators, activeRequests) {
     const activeElevators = elevators.filter(e => e.state !== 'idle').length
     const utilizationRate = elevators.length > 0 ? activeElevators / elevators.length : 0
-    const requestLoad = activeRequests.length / 50 // Normalize to 50 max requests
+    const requestLoad = Math.min(activeRequests.length / 50, 1)
     
     return Math.min((utilizationRate + requestLoad) / 2, 1)
   }
@@ -68,10 +78,11 @@ class MetricsService {
     }
 
     const latest = recent[recent.length - 1]
-    const avgUtilization = latest.elevatorUtilization.reduce((a, b) => a + b, 0) / Math.max(latest.elevatorUtilization.length, 1)
+    const avgUtilization = latest.elevatorUtilization.length > 0 ? 
+      latest.elevatorUtilization.reduce((a, b) => a + b, 0) / latest.elevatorUtilization.length : 0
     
     return {
-      averageWaitTime: latest.averageWaitTime / 1000, // Convert to seconds
+      averageWaitTime: latest.averageWaitTime / 1000,
       maxWaitTime: latest.maxWaitTime / 1000,
       averageTravelTime: this.calculateAverageTravelTime(),
       elevatorUtilization: latest.elevatorUtilization,
@@ -86,7 +97,7 @@ class MetricsService {
 
   getRealTimeMetrics(elevators, activeRequests) {
     const elevatorsInMotion = elevators.filter(e => e.state === 'moving_up' || e.state === 'moving_down').length
-    const averageLoadFactor = elevators.reduce((sum, e) => sum + e.getLoad(), 0) / elevators.length
+    const averageLoadFactor = elevators.length > 0 ? elevators.reduce((sum, e) => sum + e.getLoad(), 0) / elevators.length : 0
     
     return {
       currentTime: Date.now(),
@@ -94,29 +105,26 @@ class MetricsService {
       elevatorsInMotion,
       averageLoadFactor,
       systemLoad: this.calculateSystemLoad(elevators, activeRequests),
-      alertsCount: activeRequests.filter(r => r.isStarving()).length
+      alertsCount: activeRequests.filter(r => typeof r.isStarving === 'function' && r.isStarving()).length
     }
   }
 
   calculateAverageTravelTime() {
-    const servedRequests = this.requestHistory.filter(r => r.isServed && r.getTravelTime() > 0)
+    const servedRequests = this.requestHistory.filter(r => r.isServed && r.getTravelTime && r.getTravelTime() > 0)
     if (servedRequests.length === 0) return 0
     
     const totalTravelTime = servedRequests.reduce((sum, r) => sum + r.getTravelTime(), 0)
-    return (totalTravelTime / servedRequests.length) / 1000 // Convert to seconds
+    return (totalTravelTime / servedRequests.length) / 1000
   }
 
   calculateSatisfactionScore(metrics) {
     let score = 100
     
-    // Deduct points for long wait times
     if (metrics.averageWaitTime > 30000) score -= 20
     else if (metrics.averageWaitTime > 15000) score -= 10
     
-    // Deduct points for starvation
     score -= metrics.starvationCount * 15
     
-    // Deduct points for high system load
     if (metrics.systemLoad > 0.8) score -= 15
     else if (metrics.systemLoad > 0.6) score -= 5
     
@@ -126,7 +134,6 @@ class MetricsService {
   addRequestToHistory(request) {
     this.requestHistory.push(request)
     
-    // Keep only last 1000 requests
     if (this.requestHistory.length > 1000) {
       this.requestHistory.shift()
     }

@@ -142,30 +142,6 @@ const RequestGenerator: React.FC = () => {
           </Button>
         </div>
 
-        {/* Scenario Generator */}
-        <div className="space-y-4">
-          <h4 className="text-sm font-medium">Traffic Scenarios</h4>
-          <div className="grid grid-cols-2 gap-2">
-            {scenarios.map((scenario) => (
-              <Button
-                key={scenario.id}
-                onClick={() => handleScenario(scenario.id)}
-                disabled={!isRunning}
-                variant="outline"
-                className="h-auto flex-col gap-2 p-3"
-              >
-                <scenario.icon className={`h-5 w-5 ${scenario.color}`} />
-                <div className="text-center">
-                  <div className="text-xs font-medium">{scenario.name}</div>
-                  <div className="text-[10px] text-muted-foreground">
-                    {scenario.description}
-                  </div>
-                </div>
-              </Button>
-            ))}
-          </div>
-        </div>
-
         {/* Quick Actions */}
         <div className="space-y-4">
           <h4 className="text-sm font-medium">Quick Actions</h4>

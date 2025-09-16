@@ -1,37 +1,39 @@
-const ELEVATOR_STATES = {
-  IDLE: 'idle',
-  MOVING_UP: 'moving_up',
-  MOVING_DOWN: 'moving_down',
-  LOADING: 'loading',
-  MAINTENANCE: 'maintenance'
-}
-
-const DIRECTIONS = {
-  UP: 'up',
-  DOWN: 'down',
-  IDLE: 'idle'
-}
-
 const DEFAULT_CONFIG = {
   NUM_ELEVATORS: 3,
   NUM_FLOORS: 15,
   ELEVATOR_CAPACITY: 8,
-  FLOOR_TRAVEL_TIME: 2000,
-  DOOR_OPEN_TIME: 3000,
-  SIMULATION_INTERVAL: 100
+  SIMULATION_SPEED: 1,
+  REQUEST_FREQUENCY: 2,
+  SIMULATION_INTERVAL: 1000,
+  numElevators: 3,
+  numFloors: 15,
+  capacity: 8,
+  speed: 1,
+  requestFrequency: 2
 }
 
 const PRIORITY_WEIGHTS = {
   STARVATION_THRESHOLD: 30000,
   CRITICAL_THRESHOLD: 60000,
   EXPONENTIAL_BASE: 1.8,
-  MORNING_RUSH_MULTIPLIER: 2.0,
-  EVENING_RUSH_MULTIPLIER: 1.5
+  RUSH_HOUR_MULTIPLIER: 2.0,
+}
+
+const WEBSOCKET_EVENTS = {
+  CONNECTION: 'connection',
+  DISCONNECT: 'disconnect',
+  SIMULATION_UPDATE: 'simulation_update',
+  METRICS_UPDATE: 'metrics_update',
+  CONFIG_CHANGE: 'config_change',
+  ADD_REQUEST: 'add_request',
+  EMERGENCY_STOP: 'emergency_stop',
+  START_SIMULATION: 'start_simulation',
+  STOP_SIMULATION: 'stop_simulation',
+  RESET_SIMULATION: 'reset_simulation'
 }
 
 module.exports = {
-  ELEVATOR_STATES,
-  DIRECTIONS,
   DEFAULT_CONFIG,
-  PRIORITY_WEIGHTS
+  PRIORITY_WEIGHTS,
+  WEBSOCKET_EVENTS
 }

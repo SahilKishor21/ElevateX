@@ -82,7 +82,7 @@ const FloorIndicator: React.FC<FloorIndicatorProps> = ({
             className={cn(
               "p-0 border-2 transition-all duration-200 shadow-md hover:scale-110",
               hasUpRequest 
-                ? 'bg-green-600 border-green-400 text-white animate-pulse shadow-green-500/50 hover:bg-green-500' 
+                ? 'bg-green-600 border-green-400 text-white  shadow-green-500/50 hover:bg-green-500' 
                 : 'bg-slate-700/80 border-slate-600 text-slate-300 hover:border-green-400 hover:bg-slate-600 hover:text-green-400'
             )}
             style={{
@@ -106,7 +106,7 @@ const FloorIndicator: React.FC<FloorIndicatorProps> = ({
             className={cn(
               "p-0 border-2 transition-all duration-200 shadow-md hover:scale-110",
               hasDownRequest 
-                ? 'bg-blue-600 border-blue-400 text-white animate-pulse shadow-blue-500/50 hover:bg-blue-500' 
+                ? 'bg-blue-600 border-blue-400 text-white  shadow-blue-500/50 hover:bg-blue-500' 
                 : 'bg-slate-700/80 border-slate-600 text-slate-300 hover:border-blue-400 hover:bg-slate-600 hover:text-blue-400'
             )}
             style={{
@@ -161,7 +161,7 @@ const FloorIndicator: React.FC<FloorIndicatorProps> = ({
       {/* Activity Indicator */}
       {(hasUpRequest || hasDownRequest) && (
         <div className="absolute -left-1 top-1/2 transform -translate-y-1/2">
-          <div className="w-1 h-6 bg-gradient-to-b from-green-500 to-blue-500 rounded-full animate-pulse opacity-80" />
+          <div className="w-1 h-6 bg-gradient-to-b from-green-500 to-blue-500 rounded-full  opacity-80" />
         </div>
       )}
     </div>

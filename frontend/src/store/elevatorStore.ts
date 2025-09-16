@@ -1,62 +1,28 @@
 import { create } from 'zustand'
 import { subscribeWithSelector } from 'zustand/middleware'
-
-interface Elevator {
-  totalDistance: number
-  id: number
-  currentFloor: number
-  targetFloor: number | null
-  state: string
-  direction: string
-  passengers: any[]
-  floorHeight: number
-  capacity: number
-  doorOpen: boolean
-  requestQueue: number[]
-  color: string
-}
-
-interface FloorRequest {
-  floor: number
-  direction: string
-  timestamp: number
-  active: boolean
-}
-
-interface ElevatorConfig {
-  numElevators: number
-  numFloors: number
-  capacity: number
-  speed: number
-  requestFrequency: number
-}
-
-interface SystemStatus {
-  activeElevators: number
-  utilizationRate: number
-  isHealthy: boolean
-}
+import { Elevator, ElevatorState, DirectionType, FloorRequest, ElevatorConfig } from '@/types/elevator'
+import { Request } from '@/types/request'
+import { DEFAULT_CONFIG } from '@/lib/constants'
 
 interface ElevatorStore {
   elevators: Elevator[]
   floorRequests: FloorRequest[]
-  activeRequests: any[]
+  activeRequests: Request[]
   config: ElevatorConfig
   isRunning: boolean
   currentTime: number
-  isConnected: boolean
-  isLoading: boolean
-  systemStatus: SystemStatus
-
+  
   setElevators: (elevators: Elevator[]) => void
+  updateElevator: (id: number, updates: Partial<Elevator>) => void
   setFloorRequests: (requests: FloorRequest[]) => void
-  setActiveRequests: (requests: any[]) => void
+  addFloorRequest: (floor: number, direction: DirectionType) => void // Make sure this exists
+  removeFloorRequest: (floor: number, direction: DirectionType) => void
+  setActiveRequests: (requests: Request[]) => void
+  addRequest: (request: Request) => void
+  removeRequest: (id: string) => void
   updateConfig: (updates: Partial<ElevatorConfig>) => void
   setIsRunning: (running: boolean) => void
   setCurrentTime: (time: number) => void
-  setIsConnected: (connected: boolean) => void
-  setIsLoading: (loading: boolean) => void
-  setSystemStatus: (status: Partial<SystemStatus>) => void
   resetSystem: () => void
 }
 
@@ -66,25 +32,64 @@ export const useElevatorStore = create<ElevatorStore>()(
     floorRequests: [],
     activeRequests: [],
     config: {
-      numElevators: 3,
-      numFloors: 15,
-      capacity: 8,
-      speed: 1,
-      requestFrequency: 2,
+      numElevators: DEFAULT_CONFIG.NUM_ELEVATORS,
+      numFloors: DEFAULT_CONFIG.NUM_FLOORS,
+      capacity: DEFAULT_CONFIG.ELEVATOR_CAPACITY,
+      speed: DEFAULT_CONFIG.SIMULATION_SPEED,
+      requestFrequency: DEFAULT_CONFIG.REQUEST_FREQUENCY,
     },
     isRunning: false,
     currentTime: 0,
-    isConnected: false,
-    isLoading: false,
-    systemStatus: {
-      activeElevators: 0,
-      utilizationRate: 0,
-      isHealthy: true,
-    },
 
     setElevators: (elevators) => set({ elevators }),
+
+    updateElevator: (id, updates) =>
+      set((state) => ({
+        elevators: state.elevators.map((elevator) =>
+          elevator.id === id ? { ...elevator, ...updates } : elevator
+        ),
+      })),
+
     setFloorRequests: (floorRequests) => set({ floorRequests }),
+
+    addFloorRequest: (floor, direction) =>
+      set((state) => {
+        const exists = state.floorRequests.some(
+          (req) => req.floor === floor && req.direction === direction
+        )
+        if (exists) return state
+
+        return {
+          floorRequests: [
+            ...state.floorRequests,
+            {
+              floor,
+              direction,
+              timestamp: Date.now(),
+              active: true,
+            },
+          ],
+        }
+      }),
+
+    removeFloorRequest: (floor, direction) =>
+      set((state) => ({
+        floorRequests: state.floorRequests.filter(
+          (req) => !(req.floor === floor && req.direction === direction)
+        ),
+      })),
+
     setActiveRequests: (activeRequests) => set({ activeRequests }),
+
+    addRequest: (request) =>
+      set((state) => ({
+        activeRequests: [...state.activeRequests, request],
+      })),
+
+    removeRequest: (id) =>
+      set((state) => ({
+        activeRequests: state.activeRequests.filter((req) => req.id !== id),
+      })),
 
     updateConfig: (updates) =>
       set((state) => ({
@@ -92,13 +97,8 @@ export const useElevatorStore = create<ElevatorStore>()(
       })),
 
     setIsRunning: (isRunning) => set({ isRunning }),
+
     setCurrentTime: (currentTime) => set({ currentTime }),
-    setIsConnected: (isConnected) => set({ isConnected }),
-    setIsLoading: (isLoading) => set({ isLoading }),
-    setSystemStatus: (updates) =>
-      set((state) => ({
-        systemStatus: { ...state.systemStatus, ...updates },
-      })),
 
     resetSystem: () =>
       set({
@@ -107,12 +107,6 @@ export const useElevatorStore = create<ElevatorStore>()(
         activeRequests: [],
         isRunning: false,
         currentTime: 0,
-        isLoading: false,
-        systemStatus: {
-          activeElevators: 0,
-          utilizationRate: 0,
-          isHealthy: true,
-        },
       }),
   }))
 )

@@ -1,73 +1,63 @@
-'use client'
-
-import { useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useElevatorStore } from '@/store/elevatorStore'
 import { useWebSocket } from './useWebSocket'
+import { generateId } from '@/lib/utils'
+import { RequestType, RequestPriority } from '@/types/request'
+import type { DirectionType } from '@/types/elevator'
 
 export const useSimulation = () => {
+  const [isLoading, setIsLoading] = useState(false)
+  const [lastUpdate, setLastUpdate] = useState(0)
+
   const {
     elevators,
     config,
+    isRunning,
     floorRequests,
     activeRequests,
-    isRunning,
-    isConnected,
-    isLoading,
-    systemStatus,
-    updateConfig: updateStoreConfig,
-    setIsLoading,
-    setSystemStatus,
+    updateConfig,
+    addFloorRequest,
   } = useElevatorStore()
 
   const {
-    startSimulation: wsStart,
-    stopSimulation: wsStop,
-    resetSimulation: wsReset,
+    isConnected,
+    startSimulation,
+    stopSimulation,
+    resetSimulation,
     addRequest,
-    updateConfig: wsUpdateConfig,
+    updateConfig: updateServerConfig,
   } = useWebSocket()
 
-  const startSimulation = useCallback(() => {
-    console.log('Starting simulation with config:', config)
+  const handleStart = useCallback(async () => {
+    if (!isConnected) return
     setIsLoading(true)
-    wsStart(config)
-    setIsLoading(false)
-  }, [wsStart, config, setIsLoading])
-
-  const stopSimulation = useCallback(() => {
-    console.log('Stopping simulation')
-    setIsLoading(true)
-    wsStop()
-    setIsLoading(false)
-  }, [wsStop, setIsLoading])
-
-  const resetSimulation = useCallback(() => {
-    console.log('Resetting simulation')
-    setIsLoading(true)
-    wsReset()
-    setIsLoading(false)
-  }, [wsReset, setIsLoading])
-
-  const addFloorCall = useCallback((floor: number, direction: 'up' | 'down') => {
-    console.log(`Adding floor call: Floor ${floor}, Direction: ${direction}`)
-    const request = {
-      id: `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      type: 'floor_call',
-      originFloor: floor,
-      destinationFloor: null,
-      direction,
-      timestamp: Date.now(),
-      priority: 2,
-      waitTime: 0,
-      assignedElevator: null,
-      isActive: true,
-      isServed: false,
-      passengerCount: 1,
+    try {
+      startSimulation(config)
+    } finally {
+      setTimeout(() => setIsLoading(false), 1000)
     }
-    addRequest(request)
-  }, [addRequest])
+  }, [isConnected, startSimulation, config])
+
+  const handleStop = useCallback(() => {
+    if (!isConnected) return
+    stopSimulation()
+  }, [isConnected, stopSimulation])
+
+  const handleReset = useCallback(() => {
+    if (!isConnected) return
+    resetSimulation()
+  }, [isConnected, resetSimulation])
+
+  const handleConfigChange = useCallback((updates: any) => {
+    updateConfig(updates)
+    if (isConnected) {
+      updateServerConfig(updates)
+    }
+  }, [updateConfig, updateServerConfig, isConnected])
 
   const generateRandomRequest = useCallback(() => {
+    if (!isConnected || config.numFloors < 2) return
+
     const originFloor = Math.floor(Math.random() * config.numFloors) + 1
     let destinationFloor = Math.floor(Math.random() * config.numFloors) + 1
     
@@ -76,13 +66,13 @@ export const useSimulation = () => {
     }
 
     const request = {
-      id: `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      type: 'floor_call',
+      id: generateId(),
+      type: RequestType.FLOOR_CALL,
       originFloor,
       destinationFloor,
-      direction: destinationFloor > originFloor ? 'up' : 'down',
+      direction: (destinationFloor > originFloor ? 'up' : 'down') as DirectionType,
       timestamp: Date.now(),
-      priority: 2,
+      priority: RequestPriority.NORMAL,
       waitTime: 0,
       assignedElevator: null,
       isActive: true,
@@ -90,42 +80,78 @@ export const useSimulation = () => {
       passengerCount: Math.floor(Math.random() * 4) + 1,
     }
 
-    console.log('Generating random request:', request)
     addRequest(request)
-  }, [config.numFloors, addRequest])
+  }, [isConnected, config.numFloors, addRequest])
+
+  const addFloorCall = useCallback((floor: number, direction: 'up' | 'down') => {
+    addFloorRequest(floor, direction as DirectionType)
+    
+    const request = {
+      id: generateId(),
+      type: RequestType.FLOOR_CALL,
+      originFloor: floor,
+      destinationFloor: null,
+      direction: direction as DirectionType,
+      timestamp: Date.now(),
+      priority: RequestPriority.NORMAL,
+      waitTime: 0,
+      assignedElevator: null,
+      isActive: true,
+      isServed: false,
+      passengerCount: 1,
+    }
+
+    addRequest(request)
+  }, [addFloorRequest, addRequest])
 
   const generatePeakTraffic = useCallback(() => {
-    console.log('Generating peak traffic...')
-    for (let i = 0; i < 8; i++) {
-      setTimeout(() => generateRandomRequest(), i * 300)
-    }
-  }, [generateRandomRequest])
+    if (!isConnected) return
 
-  const updateConfigAndSync = useCallback((updates: any) => {
-    console.log('Updating config:', updates)
-    updateStoreConfig(updates)
-    wsUpdateConfig(updates)
-  }, [updateStoreConfig, wsUpdateConfig])
+    const requestCount = Math.floor(Math.random() * 10) + 5
+    for (let i = 0; i < requestCount; i++) {
+      setTimeout(() => generateRandomRequest(), i * 200)
+    }
+  }, [isConnected, generateRandomRequest])
+
+  const getSystemStatus = useCallback(() => {
+    const totalElevators = elevators.length
+    const activeElevators = elevators.filter(e => e.state !== 'idle').length
+    const utilizationRate = totalElevators > 0 ? activeElevators / totalElevators : 0
+    
+    return {
+      totalElevators,
+      activeElevators,
+      utilizationRate,
+      pendingRequests: activeRequests.length,
+      floorRequestsCount: floorRequests.length,
+      isHealthy: utilizationRate < 0.9 && activeRequests.length < 50,
+    }
+  }, [elevators, activeRequests, floorRequests])
+
+  useEffect(() => {
+    if (isRunning) {
+      setLastUpdate(Date.now())
+    }
+  }, [elevators, isRunning])
 
   return {
+    isRunning,
+    isLoading,
+    isConnected,
+    lastUpdate,
     elevators,
     config,
-    floorRequests,
     activeRequests,
-    isRunning,
-    isConnected,
-    isLoading,
-    systemStatus,
+    floorRequests,
+    systemStatus: getSystemStatus(),
     actions: {
-      start: startSimulation,
-      stop: stopSimulation,
-      reset: resetSimulation,
+      start: handleStart,
+      stop: handleStop,
+      reset: handleReset,
+      updateConfig: handleConfigChange,
       addFloorCall,
       generateRandomRequest,
       generatePeakTraffic,
-      updateConfig: updateConfigAndSync,
-      setIsLoading,
-      setSystemStatus,
-    }
+    },
   }
 }

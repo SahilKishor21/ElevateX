@@ -44,7 +44,7 @@ interface RequestResponse {
 }
 
 export const useWebSocket = ({ 
-  url = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001',
+  url = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001' || 'https://elevate-x-seven.vercel.app/',
   autoConnect = true 
 }: UseWebSocketProps = {}) => {
   const socketRef = useRef<any>(null) // Using any instead of Socket type

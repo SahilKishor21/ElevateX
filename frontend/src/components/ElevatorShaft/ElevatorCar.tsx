@@ -8,6 +8,8 @@ import { DEFAULT_CONFIG } from '@/lib/constants'
 interface ElevatorCarProps {
   elevator: Elevator
   totalFloors: number
+  floorHeight?: number
+  elevatorWidth?: number
   isSelected?: boolean
   onClick?: () => void
   animate?: boolean

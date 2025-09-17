@@ -45,7 +45,7 @@ interface RequestResponse {
 }
 
 export const useWebSocket = ({ 
-  url = 'http://localhost:3001',
+  url = 'https://elevatex-2ght.onrender.com',
   autoConnect = true 
 }: UseWebSocketProps = {}) => {
   const socketRef = useRef<any>(null)

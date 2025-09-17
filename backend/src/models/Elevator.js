@@ -70,25 +70,84 @@ class Elevator {
         break
 
       case 'idle':
-        if (this.requestQueue.length > 0) {
-          const nextFloor = this.requestQueue.shift()
-          this.moveTo(nextFloor)
+        // CRITICAL FIX: Only process queue if no current target and not already moving
+        if (this.requestQueue.length > 0 && !this.targetFloor) {
+          const nextFloor = this.getNextFloorFromQueue()
+          if (nextFloor && nextFloor !== this.currentFloor) {
+            console.log(`E${this.id}: Moving from queue to floor ${nextFloor}`)
+            this.moveTo(nextFloor)
+          }
         }
         break
     }
   }
 
-  addRequest(floor) {
-    if (!this.requestQueue.includes(floor) && floor !== this.currentFloor) {
-      this.requestQueue.push(floor)
-      this.requestQueue.sort((a, b) => {
-        if (this.direction === 'up') {
-          return a - b
-        } else if (this.direction === 'down') {
-          return b - a
-        }
-        return Math.abs(a - this.currentFloor) - Math.abs(b - this.currentFloor)
+  // CRITICAL FIX: Smarter queue processing
+  getNextFloorFromQueue() {
+    if (this.requestQueue.length === 0) return null
+
+    // Remove current floor from queue if present
+    this.requestQueue = this.requestQueue.filter(floor => floor !== this.currentFloor)
+    
+    if (this.requestQueue.length === 0) return null
+
+    // Get the next floor based on current direction or closest
+    let nextFloor
+    
+    if (this.direction === 'up') {
+      // Continue up if possible
+      const upFloors = this.requestQueue.filter(floor => floor > this.currentFloor)
+      if (upFloors.length > 0) {
+        nextFloor = Math.min(...upFloors)
+      } else {
+        // No more up floors, go to highest down floor
+        nextFloor = Math.max(...this.requestQueue)
+      }
+    } else if (this.direction === 'down') {
+      // Continue down if possible
+      const downFloors = this.requestQueue.filter(floor => floor < this.currentFloor)
+      if (downFloors.length > 0) {
+        nextFloor = Math.max(...downFloors)
+      } else {
+        // No more down floors, go to lowest up floor
+        nextFloor = Math.min(...this.requestQueue)
+      }
+    } else {
+      // Idle - go to closest floor
+      nextFloor = this.requestQueue.reduce((closest, floor) => {
+        return Math.abs(floor - this.currentFloor) < Math.abs(closest - this.currentFloor) 
+          ? floor : closest
       })
+    }
+
+    // Remove the selected floor from queue
+    const floorIndex = this.requestQueue.indexOf(nextFloor)
+    if (floorIndex !== -1) {
+      this.requestQueue.splice(floorIndex, 1)
+    }
+
+    return nextFloor
+  }
+
+  // CRITICAL FIX: Better request adding with immediate action
+  addRequest(floor) {
+    if (floor === this.currentFloor) {
+      console.log(`E${this.id}: Ignoring request for current floor ${floor}`)
+      return // Don't add request for current floor
+    }
+
+    if (!this.requestQueue.includes(floor)) {
+      console.log(`E${this.id}: Adding request for floor ${floor}`)
+      this.requestQueue.push(floor)
+      
+      // CRITICAL FIX: If idle and no target, immediately start moving
+      if (this.state === 'idle' && !this.targetFloor) {
+        const nextFloor = this.getNextFloorFromQueue()
+        if (nextFloor) {
+          console.log(`E${this.id}: Immediately moving to floor ${nextFloor}`)
+          this.moveTo(nextFloor)
+        }
+      }
     }
   }
 
@@ -101,21 +160,40 @@ class Elevator {
     return false
   }
 
+  // IMPROVED: Better random passenger generation with realistic data
   addSimulatedPassenger() {
     if (this.passengers.length >= this.capacity) return false
 
-    const passenger = {
-      id: `passenger_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-      originFloor: this.currentFloor,
-      destinationFloor: Math.floor(Math.random() * 15) + 1,
-      boardTime: Date.now(),
-      waitTime: 0,
-      priority: 1
+    // Generate realistic destinations based on current floor
+    let destinationFloor
+    if (this.currentFloor === 1) {
+      // From lobby, go to upper floors
+      destinationFloor = Math.floor(Math.random() * 10) + 2 // Floors 2-11
+    } else if (this.currentFloor > 10) {
+      // From upper floors, likely go to lobby or nearby floors
+      if (Math.random() < 0.6) {
+        destinationFloor = 1 // 60% chance to lobby
+      } else {
+        destinationFloor = Math.floor(Math.random() * 15) + 1
+      }
+    } else {
+      // From middle floors, random destination
+      destinationFloor = Math.floor(Math.random() * 15) + 1
     }
 
     // Ensure destination is different from origin
-    while (passenger.destinationFloor === passenger.originFloor) {
-      passenger.destinationFloor = Math.floor(Math.random() * 15) + 1
+    while (destinationFloor === this.currentFloor) {
+      destinationFloor = Math.floor(Math.random() * 15) + 1
+    }
+
+    const passenger = {
+      id: `sim_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+      originFloor: this.currentFloor,
+      destinationFloor: destinationFloor,
+      boardTime: Date.now(),
+      waitTime: 0,
+      priority: 1,
+      isRealRequest: false // Mark as simulated
     }
 
     this.passengers.push(passenger)
@@ -126,7 +204,9 @@ class Elevator {
   removePassenger(passengerId) {
     const index = this.passengers.findIndex(p => p.id === passengerId)
     if (index !== -1) {
-      return this.passengers.splice(index, 1)[0]
+      const removed = this.passengers.splice(index, 1)[0]
+      console.log(`Passenger removed: ${removed.isRealRequest ? 'REAL' : 'SIM'} - ${removed.id}`)
+      return removed
     }
     return null
   }
@@ -136,7 +216,7 @@ class Elevator {
   }
 
   isIdle() {
-    return this.state === 'idle' && this.requestQueue.length === 0
+    return this.state === 'idle' && this.requestQueue.length === 0 && !this.targetFloor
   }
 
   isFull() {
@@ -160,6 +240,7 @@ class Elevator {
     }
   }
 
+  // ENHANCED: Better status reporting with passenger details
   getStatus() {
     return {
       id: this.id,
@@ -170,13 +251,18 @@ class Elevator {
       passengers: this.passengers,
       capacity: this.capacity,
       doorOpen: this.doorOpen,
-      requestQueue: this.requestQueue,
+      requestQueue: [...this.requestQueue], // Copy to prevent mutation
       totalDistance: this.totalDistance,
       totalTrips: this.totalTrips,
       maintenanceMode: this.maintenanceMode,
       color: this.color,
       load: this.getLoad(),
-      utilization: this.getUtilization()
+      utilization: this.getUtilization(),
+      // NEW: Enhanced debug info
+      passengerCount: this.passengers.length,
+      realPassengers: this.passengers.filter(p => p.isRealRequest).length,
+      simPassengers: this.passengers.filter(p => !p.isRealRequest).length,
+      queueLength: this.requestQueue.length
     }
   }
 }

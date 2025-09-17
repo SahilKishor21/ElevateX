@@ -53,6 +53,7 @@ class Request {
     this.isServed = true
     this.isActive = false
     this.servedAt = Date.now()
+    console.log(`Request ${this.id} marked as served: ${this.originFloor} → ${this.destinationFloor}`)
   }
 
   getTravelTime() {

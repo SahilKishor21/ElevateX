@@ -67,10 +67,10 @@ export const useSimulation = () => {
 
     const request = {
       id: generateId(),
-      type: RequestType.FLOOR_CALL,
+      type: 'floor_call', // FIXED: Use string instead of enum
       originFloor,
       destinationFloor,
-      direction: (destinationFloor > originFloor ? 'up' : 'down') as DirectionType,
+      direction: (destinationFloor > originFloor ? 'up' : 'down'),
       timestamp: Date.now(),
       priority: RequestPriority.NORMAL,
       waitTime: 0,
@@ -80,18 +80,22 @@ export const useSimulation = () => {
       passengerCount: Math.floor(Math.random() * 4) + 1,
     }
 
+    console.log('Generating random request:', request)
     addRequest(request)
   }, [isConnected, config.numFloors, addRequest])
 
-  const addFloorCall = useCallback((floor: number, direction: 'up' | 'down') => {
-    addFloorRequest(floor, direction as DirectionType)
+  // NEW: Complete request with origin AND destination
+  const addCompleteRequest = useCallback((originFloor: number, destinationFloor: number) => {
+    if (!isConnected) return
+
+    const direction = destinationFloor > originFloor ? 'up' : 'down'
     
     const request = {
       id: generateId(),
-      type: RequestType.FLOOR_CALL,
-      originFloor: floor,
-      destinationFloor: null,
-      direction: direction as DirectionType,
+      type: 'floor_call', // FIXED: Use string instead of enum
+      originFloor,
+      destinationFloor,
+      direction,
       timestamp: Date.now(),
       priority: RequestPriority.NORMAL,
       waitTime: 0,
@@ -101,12 +105,37 @@ export const useSimulation = () => {
       passengerCount: 1,
     }
 
+    console.log('Adding complete request:', request)
+    addRequest(request)
+  }, [isConnected, addRequest])
+
+  // Keep original addFloorCall for floor button presses
+  const addFloorCall = useCallback((floor: number, direction: 'up' | 'down') => {
+    addFloorRequest(floor, direction as DirectionType)
+    
+    const request = {
+      id: generateId(),
+      type: 'floor_call', // FIXED: Use string instead of enum
+      originFloor: floor,
+      destinationFloor: null, // Floor button press - no destination yet
+      direction,
+      timestamp: Date.now(),
+      priority: RequestPriority.NORMAL,
+      waitTime: 0,
+      assignedElevator: null,
+      isActive: true,
+      isServed: false,
+      passengerCount: 1,
+    }
+
+    console.log('Adding floor call:', request)
     addRequest(request)
   }, [addFloorRequest, addRequest])
 
   const generatePeakTraffic = useCallback(() => {
     if (!isConnected) return
 
+    console.log('Generating peak traffic...')
     const requestCount = Math.floor(Math.random() * 10) + 5
     for (let i = 0; i < requestCount; i++) {
       setTimeout(() => generateRandomRequest(), i * 200)
@@ -150,6 +179,7 @@ export const useSimulation = () => {
       reset: handleReset,
       updateConfig: handleConfigChange,
       addFloorCall,
+      addCompleteRequest, // ADDED: The missing function
       generateRandomRequest,
       generatePeakTraffic,
     },

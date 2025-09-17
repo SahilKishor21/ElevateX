@@ -1,16 +1,27 @@
 'use client'
 
 import React from 'react'
-import { Building } from 'lucide-react'
+import { Building, Menu } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import ThemeToggle from './ThemeToggle'
 import { useUIStore } from '@/store/uiStore'
 
 const Header: React.FC = () => {
-  const { theme } = useUIStore()
+  const { theme, sidebarOpen, setSidebarOpen } = useUIStore()
 
   return (
     <header className="h-16 bg-slate-800 border-b border-slate-700 px-6 flex items-center justify-between">
       <div className="flex items-center gap-4">
+        {/* Hamburger Menu Button */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          className="text-white hover:bg-slate-700 hover:text-white"
+        >
+          <Menu className="h-5 w-5" />
+        </Button>
+        
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-purple-600">
             <Building className="h-5 w-5 text-white" />
@@ -36,8 +47,6 @@ const Header: React.FC = () => {
             System Load: <span className="text-yellow-400 font-medium">67%</span>
           </div>
         </div>
-        
-       
         
         <ThemeToggle />
       </div>

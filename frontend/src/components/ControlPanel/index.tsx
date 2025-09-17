@@ -22,32 +22,43 @@ const ControlPanel: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
-      <SimulationControls />
-      <ParameterControls />
-      <RequestGenerator />
-      
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Zap className="h-5 w-5" />
-            Stress Test
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Button
-            onClick={runStressTest}
-            disabled={!isConnected || !isRunning}
-            variant="destructive"
-            className="w-full"
-          >
-            Generate 120 Requests (Stress Test)
-          </Button>
-          <p className="text-xs text-muted-foreground mt-2">
-            Tests system with high request volume to ensure smooth handling of 100+ requests
-          </p>
-        </CardContent>
-      </Card>
+    <div className="h-full overflow-y-auto">
+      <div className="space-y-4 p-1">
+        <div className="min-h-0">
+          <SimulationControls />
+        </div>
+        
+        <div className="min-h-0">
+          <ParameterControls />
+        </div>
+        
+        <div className="min-h-0">
+          <RequestGenerator />
+        </div>
+        
+        <Card className="min-h-0">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Zap className="h-4 w-4" />
+              Stress Test
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Button
+              onClick={runStressTest}
+              disabled={!isConnected || !isRunning}
+              variant="destructive"
+              className="w-full"
+              size="sm"
+            >
+              Generate 120 Requests
+            </Button>
+            <p className="text-xs text-muted-foreground leading-tight">
+              Tests system with high request volume to ensure smooth handling of 100+ requests
+            </p>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }

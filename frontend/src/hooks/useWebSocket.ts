@@ -20,6 +20,7 @@ interface SimulationUpdateData {
   isRunning: boolean
   currentTime: number
   config?: any
+  totalRequests?: number
 }
 
 interface MetricsUpdateData {
@@ -44,12 +45,13 @@ interface RequestResponse {
 }
 
 export const useWebSocket = ({ 
-  url = 'https://elevatex-2ght.onrender.com' ,
+  url = 'http://localhost:3001',
   autoConnect = true 
 }: UseWebSocketProps = {}) => {
-  const socketRef = useRef<any>(null) // Using any instead of Socket type
+  const socketRef = useRef<any>(null)
   const [isConnected, setIsConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [lastUpdateTime, setLastUpdateTime] = useState(0)
 
   const {
     setElevators,
@@ -58,6 +60,8 @@ export const useWebSocket = ({
     setIsRunning,
     setCurrentTime,
     updateConfig: updateStoreConfig,
+    activeRequests,
+    floorRequests,
   } = useElevatorStore()
 
   const {
@@ -79,6 +83,11 @@ export const useWebSocket = ({
       reconnectionDelay: 1000,
     })
 
+    // Expose socket to window for debugging
+    if (typeof window !== 'undefined') {
+      (window as any).socket = socketRef.current
+    }
+
     socketRef.current.on('connect', () => {
       console.log('WebSocket connected')
       setIsConnected(true)
@@ -96,46 +105,106 @@ export const useWebSocket = ({
       setIsConnected(false)
     })
 
+    // REDUCED DEBUG: Only log when state actually changes
     socketRef.current.on(WEBSOCKET_EVENTS.SIMULATION_UPDATE, (data: SimulationUpdateData) => {
-      console.log('Simulation update received')
-      setElevators(data.elevators || [])
-      setFloorRequests(data.floorRequests || [])
-      setActiveRequests(data.activeRequests || [])
-      setIsRunning(data.isRunning || false)
-      setCurrentTime(data.currentTime || 0)
+      // Only log significant state changes
+      const currentActive = activeRequests.length
+      const currentFloor = floorRequests.length
+      const newActive = data.activeRequests?.length || 0
+      const newFloor = data.floorRequests?.length || 0
       
-      if (data.config) {
-        updateStoreConfig(data.config)
+      if (currentActive !== newActive || currentFloor !== newFloor) {
+        console.log('State Change:', {
+          active: `${currentActive} → ${newActive}`,
+          floor: `${currentFloor} → ${newFloor}`,
+          running: data.isRunning
+        })
+      }
+      
+      // Update state with comprehensive error handling
+      try {
+        if (data.elevators !== undefined) {
+          const elevatorsArray = Array.isArray(data.elevators) ? data.elevators : []
+          setElevators(elevatorsArray)
+        }
+        
+        if (data.floorRequests !== undefined) {
+          const floorRequestsArray = Array.isArray(data.floorRequests) ? data.floorRequests : []
+          setFloorRequests(floorRequestsArray)
+        }
+        
+        if (data.activeRequests !== undefined) {
+          const activeRequestsArray = Array.isArray(data.activeRequests) ? data.activeRequests : []
+          setActiveRequests(activeRequestsArray)
+        }
+        
+        if (data.isRunning !== undefined) {
+          setIsRunning(data.isRunning)
+        }
+        
+        if (data.currentTime !== undefined) {
+          setCurrentTime(data.currentTime)
+        }
+        
+        if (data.config) {
+          updateStoreConfig(data.config)
+        }
+
+        setLastUpdateTime(Date.now())
+      } catch (updateError) {
+        console.error('State update error:', updateError)
+        setError(`State update failed: ${updateError}`)
       }
     })
 
+    // Metrics update handling
     socketRef.current.on(WEBSOCKET_EVENTS.METRICS_UPDATE, (data: MetricsUpdateData) => {
-      if (data.performance) {
-        updatePerformanceMetrics(data.performance)
+      try {
+        if (data.performance && typeof data.performance === 'object') {
+          updatePerformanceMetrics(data.performance)
+        }
+        if (data.realTime && typeof data.realTime === 'object') {
+          updateRealTimeMetrics(data.realTime)
+        }
+        if (data.historical && typeof data.historical === 'object') {
+          addHistoricalData(data.historical)
+        }
+        if (data.alerts && Array.isArray(data.alerts)) {
+          data.alerts.forEach((alert: any) => {
+            if (alert && typeof alert === 'object' && alert.id) {
+              addAlert(alert)
+            }
+          })
+        }
+      } catch (metricsError) {
+        console.error('Metrics update error:', metricsError)
       }
-      if (data.realTime) {
-        updateRealTimeMetrics(data.realTime)
-      }
-      if (data.historical) {
-        addHistoricalData(data.historical)
-      }
-      if (data.alerts) {
-        data.alerts.forEach((alert: any) => addAlert(alert))
+    })
+
+    // Algorithm update handling
+    socketRef.current.on('algorithm_update', (data: any) => {
+      // Only log if there's an error or significant change
+      if (data.error) {
+        console.error('Algorithm update error:', data.error)
       }
     })
 
     socketRef.current.on(WEBSOCKET_EVENTS.CONFIG_UPDATED, (data: ConfigUpdateResponse) => {
-      console.log('Config update response:', data)
+      console.log('Config update response:', data.success ? 'Success' : 'Failed')
       if (data.success && data.config) {
         updateStoreConfig(data.config)
       } else if (!data.success && data.error) {
+        console.error('Config update failed:', data.error)
         setError(data.error)
       }
     })
 
     socketRef.current.on('request_added', (data: RequestResponse) => {
-      console.log('Request added response:', data)
-      if (!data.success && data.error) {
+      if (data.success) {
+        console.log('Request added successfully:', data.requestId)
+        setError(null)
+      } else if (data.error) {
+        console.error('Request add failed:', data.error)
         setError(data.error)
       }
     })
@@ -143,6 +212,18 @@ export const useWebSocket = ({
     socketRef.current.on('error', (err: any) => {
       console.error('Socket error:', err)
       setError(err.message || 'Unknown socket error')
+    })
+
+    // Connection timeout handling
+    const connectionTimeout = setTimeout(() => {
+      if (!socketRef.current?.connected) {
+        console.warn('Connection timeout - server may be unavailable')
+        setError('Connection timeout - server may be unavailable')
+      }
+    }, 10000) // 10 second timeout
+
+    socketRef.current.on('connect', () => {
+      clearTimeout(connectionTimeout)
     })
   }
 
@@ -156,15 +237,26 @@ export const useWebSocket = ({
 
   const emit = (event: string, data?: any) => {
     if (!socketRef.current?.connected) {
-      const errorMsg = 'Not connected to server'
+      const errorMsg = `Not connected to server. Cannot emit ${event}`
       console.error(errorMsg)
       setError(errorMsg)
       return false
     }
     
-    console.log(`Emitting ${event}:`, data)
-    socketRef.current.emit(event, data)
-    return true
+    try {
+      socketRef.current.emit(event, data)
+      
+      // Clear error on successful emit
+      if (error) {
+        setError(null)
+      }
+      
+      return true
+    } catch (emitError) {
+      console.error(`Error emitting ${event}:`, emitError)
+      setError(`Failed to emit ${event}: ${emitError}`)
+      return false
+    }
   }
 
   const startSimulation = (config?: any) => {
@@ -183,7 +275,7 @@ export const useWebSocket = ({
   }
 
   const addRequest = (request: any) => {
-    console.log('Adding request:', request)
+    console.log('Adding request:', `${request.originFloor} → ${request.destinationFloor}`)
     return emit(WEBSOCKET_EVENTS.ADD_REQUEST, request)
   }
 
@@ -201,6 +293,22 @@ export const useWebSocket = ({
     setError(null)
   }
 
+  // Connection health monitoring
+  useEffect(() => {
+    if (!isConnected) return
+
+    const healthCheck = setInterval(() => {
+      if (socketRef.current?.connected) {
+        // Connection is healthy
+      } else {
+        console.warn('Socket disconnected unexpectedly')
+        setIsConnected(false)
+      }
+    }, 5000)
+
+    return () => clearInterval(healthCheck)
+  }, [isConnected])
+
   useEffect(() => {
     if (autoConnect) {
       connect()
@@ -211,9 +319,35 @@ export const useWebSocket = ({
     }
   }, [url, autoConnect])
 
+  // Reconnection logic on network recovery
+  useEffect(() => {
+    const handleOnline = () => {
+      if (!isConnected && autoConnect) {
+        console.log('Network restored, attempting to reconnect...')
+        setTimeout(() => {
+          connect()
+        }, 1000)
+      }
+    }
+
+    const handleOffline = () => {
+      console.log('Network lost')
+      setError('Network connection lost')
+    }
+
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [isConnected, autoConnect])
+
   return {
     isConnected,
     error,
+    lastUpdateTime,
     connect,
     disconnect,
     emit,
@@ -224,5 +358,17 @@ export const useWebSocket = ({
     updateConfig,
     emergencyStop,
     clearError,
+    // Debug utilities
+    getSocketInfo: () => ({
+      connected: socketRef.current?.connected,
+      id: socketRef.current?.id,
+      transport: socketRef.current?.io?.engine?.transport?.name
+    }),
+    // Store state for debugging
+    getCurrentStoreState: () => ({
+      activeRequests: activeRequests.length,
+      floorRequests: floorRequests.length,
+      lastUpdate: lastUpdateTime
+    })
   }
 }

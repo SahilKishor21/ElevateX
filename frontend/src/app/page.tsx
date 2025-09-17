@@ -1,3 +1,4 @@
+// src/app/page.tsx
 'use client'
 
 import React, { useEffect, useState } from 'react'
@@ -6,36 +7,37 @@ import Sidebar from '@/components/Layout/Sidebar'
 import ElevatorShaft from '@/components/ElevatorShaft'
 import Dashboard from '@/components/Dashboard'
 import ControlPanel from '@/components/ControlPanel'
+import StressTestRunner from '@/components/Testing/StressTestRunner'
+import AlgorithmComparison from '@/components/Algorithm/AlgorithmComparison'
 import { useUIStore } from '@/store/uiStore'
+import { cn } from '@/lib/utils'
 
 export default function Home() {
   const [mounted, setMounted] = useState(false)
-  const { viewMode } = useUIStore()
+  const { sidebarOpen, viewMode } = useUIStore()
 
   useEffect(() => {
     setMounted(true)
   }, [])
 
-  if (!mounted) {
-    return (
-      <div className="flex h-screen bg-slate-900 text-white items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <p>Loading Elevator Control System...</p>
-        </div>
-      </div>
-    )
-  }
-
   const renderMainContent = () => {
     switch (viewMode) {
       case 'metrics':
         return <Dashboard />
-      case 'logs':
+      case 'algorithms':
+        return <AlgorithmComparison />
+      case 'testing':
         return (
-          <div className="p-6 h-full bg-slate-900 text-white">
-            <h1 className="text-2xl font-bold mb-4">Activity Logs</h1>
-            <p className="text-slate-300">Activity logs will be implemented here</p>
+          <div className="p-6">
+            <div className="space-y-6">
+              <div>
+                <h1 className="text-3xl font-bold text-gradient mb-2">Stress Testing</h1>
+                <p className="text-muted-foreground">
+                  Test system performance with high-volume request scenarios
+                </p>
+              </div>
+              <StressTestRunner />
+            </div>
           </div>
         )
       default:
@@ -43,25 +45,83 @@ export default function Home() {
     }
   }
 
+  const renderSidePanel = () => {
+    switch (viewMode) {
+      case 'testing':
+        return (
+          <div className="space-y-4">
+            <div className="text-center p-4">
+              <h3 className="font-semibold mb-2">Test Information</h3>
+              <div className="text-sm text-muted-foreground space-y-1">
+                <p>• Tests up to 500 requests</p>
+                <p>• Monitors performance degradation</p>
+                <p>• Tracks capacity violations</p>
+                <p>• Measures starvation prevention</p>
+              </div>
+            </div>
+          </div>
+        )
+      case 'algorithms':
+        return (
+          <div className="space-y-4">
+            <div className="text-center p-4">
+              <h3 className="font-semibold mb-2">Algorithm Info</h3>
+              <div className="text-sm text-muted-foreground space-y-1">
+                <p>• Live algorithm switching</p>
+                <p>• Performance comparison</p>
+                <p>• Real-time metrics</p>
+                <p>• Trade-off analysis</p>
+              </div>
+            </div>
+          </div>
+        )
+      default:
+        return <ControlPanel />
+    }
+  }
+
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="flex h-[calc(100vh-4rem)]">
+          <Sidebar />
+          <main className="flex-1 overflow-hidden">
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 h-full p-6">
+              <div className="lg:col-span-3 overflow-auto">
+                <ElevatorShaft />
+              </div>
+              <div className="lg:col-span-1 overflow-auto border-l bg-muted/5 p-4">
+                <ControlPanel />
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="h-screen bg-slate-900 text-white overflow-hidden">
+    <div className="min-h-screen bg-background">
       <Header />
       
-      <div className="flex h-[calc(100vh-64px)]">
-        {/* Left Sidebar */}
-        <div className="w-80 flex-shrink-0 bg-slate-800 border-r border-slate-700 overflow-y-auto">
-          <Sidebar />
-        </div>
+      <div className="flex h-[calc(100vh-4rem)]">
+        <Sidebar />
         
-        {/* Main Content */}
-        <div className="flex-1 overflow-hidden">
-          {renderMainContent()}
-        </div>
-        
-        {/* Right Control Panel */}
-        <div className="w-80 flex-shrink-0 bg-slate-800 border-l border-slate-700 overflow-y-auto">
-          <ControlPanel />
-        </div>
+        <main className={cn(
+          'flex-1 transition-all duration-300 overflow-hidden',
+          sidebarOpen ? 'lg:ml-72' : 'ml-0'
+        )}>
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 h-full p-6">
+            <div className="lg:col-span-3 overflow-auto">
+              {renderMainContent()}
+            </div>
+            
+            <div className="lg:col-span-1 overflow-auto border-l bg-muted/5 p-4">
+              {renderSidePanel()}
+            </div>
+          </div>
+        </main>
       </div>
     </div>
   )

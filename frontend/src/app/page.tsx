@@ -1,3 +1,4 @@
+// src/app/page.tsx
 'use client'
 
 import React, { useEffect, useState } from 'react'
@@ -86,11 +87,11 @@ export default function Home() {
         <div className="flex h-[calc(100vh-4rem)]">
           <Sidebar />
           <main className="flex-1 overflow-hidden">
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 h-full p-6">
-              <div className="lg:col-span-2 overflow-auto">
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6 h-full p-6">
+              <div className="overflow-auto">
                 <ElevatorShaft />
               </div>
-              <div className="lg:col-span-2 overflow-auto border-l bg-muted/5 p-4">
+              <div className="overflow-auto border-l bg-muted/5 p-4 hidden lg:block w-[300px]">
                 <ControlPanel />
               </div>
             </div>
@@ -105,22 +106,17 @@ export default function Home() {
       <Header />
       
       <div className="flex h-[calc(100vh-4rem)]">
-        {/* The left sidebar is already handled in the Sidebar component */}
         <Sidebar />
         
         <main className={cn(
-          'flex-1 transition-all duration-300 overflow-hidden',
-          sidebarOpen ? 'lg:ml-72' : 'ml-0'
+          'flex-1 transition-all duration-300 overflow-hidden'
         )}>
-          {/* Main content and right sidebar container */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full p-6">
-            {/* Main content panel - now spans 8 columns for balance */}
-            <div className="lg:col-span-8 overflow-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6 h-full p-6">
+            <div className="overflow-auto">
               {renderMainContent()}
             </div>
             
-            {/* Right side panel - now spans 4 columns, equal to the left sidebar's 18rem (72px) width */}
-            <div className="lg:col-span-4 overflow-auto border-l bg-muted/5 p-4">
+            <div className="overflow-auto border-l bg-muted/5 p-4 hidden lg:block w-[300px]">
               {renderSidePanel()}
             </div>
           </div>

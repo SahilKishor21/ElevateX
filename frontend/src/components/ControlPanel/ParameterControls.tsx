@@ -115,12 +115,12 @@ const ParameterControls: React.FC = () => {
             value={[config.requestFrequency]}
             onValueChange={handleRequestFrequencyChange}
             max={10}
-            min={1}
+            min={0}
             step={0.5}
             className="w-full"
           />
           <div className="flex justify-between text-xs text-muted-foreground">
-            <span>1/min</span>
+            <span>0/min</span>
             <span>10/min</span>
           </div>
         </div>

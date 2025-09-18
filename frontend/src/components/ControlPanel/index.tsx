@@ -23,7 +23,7 @@ const ControlPanel: React.FC = () => {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="space-y-4 p-1">
+      <div className="space-y-4">
         <div className="min-h-0">
           <SimulationControls />
         </div>

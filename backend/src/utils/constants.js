@@ -1,3 +1,5 @@
+// src/utils/constants.js
+
 const DEFAULT_CONFIG = {
   NUM_ELEVATORS: 3,
   NUM_FLOORS: 15,
@@ -5,6 +7,10 @@ const DEFAULT_CONFIG = {
   SIMULATION_SPEED: 1,
   REQUEST_FREQUENCY: 2,
   SIMULATION_INTERVAL: 1000,
+  FLOOR_HEIGHT: 70,
+  ELEVATOR_WIDTH: 90,
+
+  // normalized keys for SimulationEngine
   numElevators: 3,
   numFloors: 15,
   capacity: 8,
@@ -13,10 +19,10 @@ const DEFAULT_CONFIG = {
 }
 
 const PRIORITY_WEIGHTS = {
-  STARVATION_THRESHOLD: 30000,
-  CRITICAL_THRESHOLD: 60000,
+  STARVATION_THRESHOLD: 30000,   // 30s
+  CRITICAL_THRESHOLD: 60000,     // 60s
   EXPONENTIAL_BASE: 1.8,
-  RUSH_HOUR_MULTIPLIER: 2.0,
+  RUSH_HOUR_MULTIPLIER: 2.0
 }
 
 const WEBSOCKET_EVENTS = {
@@ -32,8 +38,16 @@ const WEBSOCKET_EVENTS = {
   RESET_SIMULATION: 'reset_simulation'
 }
 
+const PERFORMANCE_THRESHOLDS = {
+  EXCELLENT_WAIT_TIME: 15,     // seconds
+  GOOD_WAIT_TIME: 30,          // seconds
+  POOR_WAIT_TIME: 60,          // seconds
+  UTILIZATION_TARGET: 0.7      // 70%
+}
+
 module.exports = {
   DEFAULT_CONFIG,
   PRIORITY_WEIGHTS,
-  WEBSOCKET_EVENTS
+  WEBSOCKET_EVENTS,
+  PERFORMANCE_THRESHOLDS
 }

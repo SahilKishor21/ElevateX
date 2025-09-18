@@ -26,22 +26,17 @@ class Request {
 
   calculatePriority() {
     this.updateWaitTime()
-    
     let priorityScore = this.priority
-    
     if (this.waitTime > 30000) {
       priorityScore *= Math.pow(1.8, (this.waitTime - 30000) / 10000)
     }
-    
     const hour = new Date().getHours()
     if (hour >= 8 && hour <= 10 && this.originFloor === 1 && this.destinationFloor > 5) {
       priorityScore *= 2.0
     }
-    
     if (hour >= 17 && hour <= 19 && this.originFloor > 5 && this.destinationFloor === 1) {
       priorityScore *= 1.5
     }
-    
     return priorityScore
   }
 
@@ -53,7 +48,6 @@ class Request {
     this.isServed = true
     this.isActive = false
     this.servedAt = Date.now()
-    console.log(`Request ${this.id} marked as served: ${this.originFloor} → ${this.destinationFloor}`)
   }
 
   getTravelTime() {
@@ -68,12 +62,16 @@ class Request {
 
   getStatus() {
     this.updateWaitTime()
+    let dir = this.direction
+    if (!dir && this.destinationFloor) {
+      dir = this.destinationFloor > this.originFloor ? 'up' : 'down'
+    }
     return {
       id: this.id,
       type: this.type,
       originFloor: this.originFloor,
       destinationFloor: this.destinationFloor,
-      direction: this.direction,
+      direction: dir,
       timestamp: this.timestamp,
       priority: this.calculatePriority(),
       waitTime: this.waitTime,

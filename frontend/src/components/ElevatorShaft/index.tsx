@@ -48,13 +48,13 @@ const ElevatorShaft: React.FC = () => {
   }, [config.numElevators, config.numFloors])
 
   return (
-    <div className="h-full bg-gradient-to-br from-slate-900 via-blue-900/10 to-slate-900">
+    <div className="h-full bg-slate-100 dark:bg-slate-900">
       <div className="p-6 h-full flex flex-col relative">
         {/* Header */}
         <div className="mb-6 flex-shrink-0 flex items-start justify-between">
           <div>
-            <h2 className="text-2xl font-bold text-white mb-2">Elevator System Simulation</h2>
-            <div className="flex items-center gap-6 text-sm text-slate-400">
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Elevator System Simulation</h2>
+            <div className="flex items-center gap-6 text-sm text-gray-500 dark:text-slate-400">
               <span className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-blue-500"></div>
                 {config.numElevators} Elevators
@@ -67,8 +67,8 @@ const ElevatorShaft: React.FC = () => {
           </div>
 
           {/* Legend - Positioned parallel to heading */}
-          <div className="bg-slate-800/90 backdrop-blur-md rounded-lg p-3 border border-slate-600/50 shadow-xl">
-            <h4 className="text-sm font-semibold text-white mb-2">Status</h4>
+          <div className="bg-white/90 backdrop-blur-md rounded-lg p-3 border border-gray-200/50 shadow-xl dark:bg-slate-800/90 dark:border-slate-600/50">
+            <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Status</h4>
             <div className="flex items-center gap-4 text-xs">
               {[
                 { color: 'bg-green-500', label: 'Moving Up' },
@@ -79,7 +79,7 @@ const ElevatorShaft: React.FC = () => {
               ].map(({ color, label }) => (
                 <div key={label} className="flex items-center gap-1">
                   <div className={`w-2.5 h-2.5 rounded-full ${color}`} />
-                  <span className="text-slate-300">{label}</span>
+                  <span className="text-gray-600 dark:text-slate-300">{label}</span>
                 </div>
               ))}
             </div>
@@ -87,10 +87,10 @@ const ElevatorShaft: React.FC = () => {
         </div>
 
         {/* Main Simulation Area */}
-        <div className="flex-1 bg-slate-800/20 backdrop-blur-sm rounded-xl border border-slate-700/50 overflow-hidden">
+        <div className="flex-1 bg-gray-100/20 backdrop-blur-sm rounded-xl border border-gray-200/50 overflow-hidden dark:bg-slate-800/20 dark:border-slate-700/50">
           <div className="h-full overflow-auto p-4">
             <div 
-              className="relative mx-auto bg-slate-900/30 rounded-xl border border-slate-600/30 shadow-2xl"
+              className="relative mx-auto bg-gray-200/30 rounded-xl border border-gray-300/30 shadow-2xl dark:bg-slate-900/30 dark:border-slate-600/30"
               style={{ 
                 width: `${dimensions.totalWidth}px`,
                 height: `${dimensions.totalHeight + 40}px`,
@@ -104,7 +104,7 @@ const ElevatorShaft: React.FC = () => {
                 {Array.from({ length: config.numElevators + 1 }, (_, i) => (
                   <div
                     key={`v-grid-${i}`}
-                    className="absolute top-0 bottom-0 w-px bg-slate-600/20"
+                    className="absolute top-0 bottom-0 w-px bg-gray-300/20 dark:bg-slate-600/20"
                     style={{
                       left: `${dimensions.shaftStartX + (i * (dimensions.elevatorWidth + dimensions.shaftSpacing)) - dimensions.shaftSpacing/2}px`
                     }}
@@ -115,7 +115,7 @@ const ElevatorShaft: React.FC = () => {
                 {Array.from({ length: config.numFloors + 1 }, (_, i) => (
                   <div
                     key={`h-grid-${i}`}
-                    className="absolute left-0 right-0 h-px bg-slate-600/20"
+                    className="absolute left-0 right-0 h-px bg-gray-300/20 dark:bg-slate-600/20"
                     style={{
                       top: `${20 + (i * dimensions.floorHeight)}px`
                     }}
@@ -130,7 +130,7 @@ const ElevatorShaft: React.FC = () => {
                   return (
                     <div
                       key={`floor-num-${floor}`}
-                      className="absolute flex items-center justify-center text-slate-400 font-medium text-xs"
+                      className="absolute flex items-center justify-center text-gray-500 font-medium text-xs dark:text-slate-400"
                       style={{
                         top: `${i * dimensions.floorHeight + (dimensions.floorHeight - 20) / 2}px`,
                         height: '20px',
@@ -164,19 +164,19 @@ const ElevatorShaft: React.FC = () => {
                     }}
                   >
                     {/* Shaft Background */}
-                    <div className="absolute inset-0 bg-slate-800/10 border-l border-r border-slate-600/20 rounded-sm" />
+                    <div className="absolute inset-0 bg-white/10 border-l border-r border-gray-300/20 rounded-sm dark:bg-slate-800/10 dark:border-slate-600/20" />
                     
                     {/* Shaft Header */}
                     <div 
                       className="absolute -top-8 left-0 right-0 text-center"
                       style={{ height: '20px' }}
                     >
-                      <div className="inline-flex items-center gap-1 px-2 py-1 bg-slate-700/80 backdrop-blur-sm rounded-md border border-slate-600">
+                      <div className="inline-flex items-center gap-1 px-2 py-1 bg-gray-200/80 backdrop-blur-sm rounded-md border border-gray-300 dark:bg-slate-700/80 dark:border-slate-600">
                         <div 
                           className="w-2 h-2 rounded-full"
                           style={{ backgroundColor: elevator.color || '#6b7280' }}
                         />
-                        <span className="text-xs font-medium text-white">E{elevator.id + 1}</span>
+                        <span className="text-sm font-medium text-gray-900 dark:text-white">E{elevator.id + 1}</span>
                       </div>
                     </div>
 
@@ -225,11 +225,11 @@ const ElevatorShaft: React.FC = () => {
 
         {/* Selection Info Panel */}
         {(selectedElevator !== null || selectedFloor !== null) && (
-          <div className="mt-4 p-4 bg-slate-800/40 backdrop-blur-sm rounded-xl border border-slate-600/50 flex-shrink-0">
+          <div className="mt-4 p-4 bg-gray-100/40 backdrop-blur-sm rounded-xl border border-gray-200/50 flex-shrink-0 dark:bg-slate-800/40 dark:border-slate-600/50">
             <div className="flex gap-8">
               {selectedElevator !== null && elevators[selectedElevator] && (
                 <div className="flex-1">
-                  <h4 className="font-semibold text-white mb-3 flex items-center gap-2">
+                  <h4 className="font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
                     <div 
                       className="w-3 h-3 rounded-full"
                       style={{ backgroundColor: elevators[selectedElevator].color || '#6b7280' }}
@@ -238,24 +238,24 @@ const ElevatorShaft: React.FC = () => {
                   </h4>
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
-                      <span className="text-slate-400">Current Floor:</span>
-                      <div className="text-white font-medium">{elevators[selectedElevator].currentFloor}</div>
+                      <span className="text-gray-500 dark:text-slate-400">Current Floor:</span>
+                      <div className="text-gray-900 font-medium dark:text-white">{elevators[selectedElevator].currentFloor}</div>
                     </div>
                     <div>
-                      <span className="text-slate-400">Status:</span>
-                      <div className="text-white font-medium capitalize">
+                      <span className="text-gray-500 dark:text-slate-400">Status:</span>
+                      <div className="text-gray-900 font-medium capitalize dark:text-white">
                         {elevators[selectedElevator].state.replace('_', ' ')}
                       </div>
                     </div>
                     <div>
-                      <span className="text-slate-400">Capacity:</span>
-                      <div className="text-white font-medium">
+                      <span className="text-gray-500 dark:text-slate-400">Capacity:</span>
+                      <div className="text-gray-900 font-medium dark:text-white">
                         {elevators[selectedElevator].passengers?.length || 0}/{elevators[selectedElevator].capacity}
                       </div>
                     </div>
                     <div>
-                      <span className="text-slate-400">Queue:</span>
-                      <div className="text-white font-medium">
+                      <span className="text-gray-500 dark:text-slate-400">Queue:</span>
+                      <div className="text-gray-900 font-medium dark:text-white">
                         {elevators[selectedElevator].requestQueue?.length || 0} requests
                       </div>
                     </div>
@@ -265,19 +265,19 @@ const ElevatorShaft: React.FC = () => {
               
               {selectedFloor !== null && (
                 <div className="flex-1">
-                  <h4 className="font-semibold text-white mb-3">Floor {selectedFloor}</h4>
+                  <h4 className="font-semibold text-gray-900 dark:text-white mb-3">Floor {selectedFloor}</h4>
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
-                      <span className="text-slate-400">Type:</span>
-                      <div className="text-white font-medium">
+                      <span className="text-gray-500 dark:text-slate-400">Type:</span>
+                      <div className="text-gray-900 font-medium dark:text-white">
                         {selectedFloor === 1 ? 'Ground Floor' : 
-                         selectedFloor === config.numFloors ? 'Top Floor' : 
-                         'Standard Floor'}
+                          selectedFloor === config.numFloors ? 'Top Floor' : 
+                          'Standard Floor'}
                       </div>
                     </div>
                     <div>
-                      <span className="text-slate-400">Active Requests:</span>
-                      <div className="text-white font-medium">
+                      <span className="text-gray-500 dark:text-slate-400">Active Requests:</span>
+                      <div className="text-gray-900 font-medium dark:text-white">
                         {floorRequests.filter(r => r.floor === selectedFloor).length}
                       </div>
                     </div>

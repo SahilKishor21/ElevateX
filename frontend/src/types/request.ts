@@ -44,3 +44,11 @@ export interface RequestMetrics {
   starvationCount: number;
   requestsPerHour: number;
 }
+
+// In your frontend constants file
+export const SIMULATION_SPEEDS = [
+  { value: 1, label: '1x Normal' },
+  { value: 2, label: '2x Fast' },
+  { value: 5, label: '5x Very Fast' },
+  { value: 10, label: '10x Ultra Fast' }
+]

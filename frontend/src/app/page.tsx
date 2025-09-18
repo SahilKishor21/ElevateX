@@ -1,4 +1,3 @@
-// src/app/page.tsx
 'use client'
 
 import React, { useEffect, useState } from 'react'
@@ -88,10 +87,10 @@ export default function Home() {
           <Sidebar />
           <main className="flex-1 overflow-hidden">
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 h-full p-6">
-              <div className="lg:col-span-3 overflow-auto">
+              <div className="lg:col-span-2 overflow-auto">
                 <ElevatorShaft />
               </div>
-              <div className="lg:col-span-1 overflow-auto border-l bg-muted/5 p-4">
+              <div className="lg:col-span-2 overflow-auto border-l bg-muted/5 p-4">
                 <ControlPanel />
               </div>
             </div>
@@ -106,18 +105,22 @@ export default function Home() {
       <Header />
       
       <div className="flex h-[calc(100vh-4rem)]">
+        {/* The left sidebar is already handled in the Sidebar component */}
         <Sidebar />
         
         <main className={cn(
           'flex-1 transition-all duration-300 overflow-hidden',
           sidebarOpen ? 'lg:ml-72' : 'ml-0'
         )}>
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 h-full p-6">
-            <div className="lg:col-span-3 overflow-auto">
+          {/* Main content and right sidebar container */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full p-6">
+            {/* Main content panel - now spans 8 columns for balance */}
+            <div className="lg:col-span-8 overflow-auto">
               {renderMainContent()}
             </div>
             
-            <div className="lg:col-span-1 overflow-auto border-l bg-muted/5 p-4">
+            {/* Right side panel - now spans 4 columns, equal to the left sidebar's 18rem (72px) width */}
+            <div className="lg:col-span-4 overflow-auto border-l bg-muted/5 p-4">
               {renderSidePanel()}
             </div>
           </div>

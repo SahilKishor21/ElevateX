@@ -15,7 +15,7 @@ const app = express()
 const server = http.createServer(app)
 const io = socketIo(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:3000" || "https://elevate-x-seven.vercel.app/",
+    origin: process.env.FRONTEND_URL || "http://localhost:3000",
     methods: ["GET", "POST"]
   }
 })
@@ -31,137 +31,110 @@ app.use(morgan('combined'))
 const simulationEngine = new SimulationEngine()
 const elevatorController = new ElevatorController(simulationEngine)
 
-global.simulationEngine = simulationEngine
-
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() })
 })
 
 app.get('/api/status', (req, res) => {
-  const allRequests = simulationEngine.getAllRequests ? simulationEngine.getAllRequests() : simulationEngine.activeRequests
-  
   res.json({
     isRunning: simulationEngine.isRunning,
     elevators: simulationEngine.elevators.map(e => e.getStatus()),
     metrics: simulationEngine.getPerformanceMetrics(),
     config: simulationEngine.config,
-    activeRequests: simulationEngine.activeRequests.length,
-    totalRequests: allRequests.length,
-    currentAlgorithm: simulationEngine.getCurrentAlgorithm()
+    currentAlgorithm: simulationEngine.getCurrentAlgorithm ? simulationEngine.getCurrentAlgorithm() : simulationEngine.config.algorithm
   })
 })
 
-// CRITICAL FIX: Proper algorithm switching endpoint
+// Get algorithm comparison
+app.get('/api/algorithm-comparison', (req, res) => {
+  try {
+    // Get all requests from simulation engine
+    const allRequests = simulationEngine.getAllRequests ? simulationEngine.getAllRequests() : 
+                        [...simulationEngine.floorRequests, ...simulationEngine.activeRequests]
+    const currentAlg = simulationEngine.getCurrentAlgorithm ? simulationEngine.getCurrentAlgorithm() : 
+                       simulationEngine.config.algorithm || algorithmController.getCurrentAlgorithmName()
+    const result = algorithmController.compareAlgorithms(simulationEngine.elevators, allRequests, currentAlg)
+    res.json(result)
+  } catch (err) {
+    console.error('/api/algorithm-comparison error:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Switch algorithm (frontend calls POST)
 app.post('/api/switch-algorithm', (req, res) => {
   try {
     const { algorithm } = req.body
+    if (!['hybrid', 'scan'].includes(algorithm)) return res.status(400).json({ error: 'Invalid algorithm' })
     
-    console.log(`API request to switch algorithm to: ${algorithm}`)
-    
-    if (!['hybrid', 'scan'].includes(algorithm)) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Invalid algorithm. Must be "hybrid" or "scan"' 
-      })
+    // Check if simulation engine has switchAlgorithm method
+    if (typeof simulationEngine.switchAlgorithm === 'function') {
+      const result = simulationEngine.switchAlgorithm(algorithm)
+      res.json({ success: true, algorithm: result.algorithm })
+    } else {
+      // Fallback to config update
+      simulationEngine.updateConfig({ algorithm })
+      algorithmController.setCurrentAlgorithm(algorithm)
+      res.json({ success: true, algorithm })
     }
-
-    // CRITICAL FIX: Actually switch the algorithm in simulation engine
-    const result = simulationEngine.switchAlgorithm(algorithm)
-    
-    // Also update the algorithm controller for consistency
-    algorithmController.currentAlgorithm = algorithm
-    
-    console.log(`Algorithm switch result:`, result)
-    
-    res.json({
-      success: true,
-      algorithm: algorithm,
-      message: `Successfully switched to ${algorithm} algorithm`,
-      simulationRunning: simulationEngine.isRunning,
-      schedulerClass: result.schedulerClass
-    })
-
-  } catch (error) {
-    console.error('Algorithm switch error:', error)
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    })
+  } catch (err) {
+    console.error('/api/switch-algorithm error:', err)
+    res.status(500).json({ error: err.message })
   }
 })
 
-// CRITICAL FIX: Updated algorithm comparison endpoint with real data
-app.get('/api/algorithm-comparison', (req, res) => {
-  console.log('=== ALGORITHM COMPARISON REQUEST ===')
-  console.log('simulationEngine.isRunning:', simulationEngine.isRunning)
-  console.log('simulationEngine.elevators.length:', simulationEngine.elevators?.length || 0)
-  console.log('simulationEngine.activeRequests.length:', simulationEngine.activeRequests?.length || 0)
-  console.log('Current algorithm:', simulationEngine.getCurrentAlgorithm())
-  
-  if (simulationEngine.elevators.length === 0) {
-    console.log('No elevators found, initializing simulation...')
-    simulationEngine.initialize(simulationEngine.config)
+// Helper function to safely get request status
+function safeGetRequestStatus(r) {
+  if (typeof r.getStatus === 'function') {
+    return r.getStatus()
+  } else {
+    // Handle plain objects from frontend
+    return {
+      id: r.id,
+      type: r.type || 'floor_call',
+      originFloor: r.originFloor,
+      destinationFloor: r.destinationFloor,
+      direction: r.direction,
+      timestamp: r.timestamp,
+      priority: r.priority || 2,
+      waitTime: r.waitTime || (Date.now() - (r.timestamp || Date.now())),
+      assignedElevator: r.assignedElevator,
+      isActive: r.isActive !== undefined ? r.isActive : true,
+      isServed: r.isServed !== undefined ? r.isServed : false,
+      passengerCount: r.passengerCount || 1
+    }
   }
-  
-  const allRequests = simulationEngine.getAllRequests ? simulationEngine.getAllRequests() : simulationEngine.activeRequests
-  
-  const comparison = algorithmController.compareAlgorithms(
-    simulationEngine.elevators,
-    allRequests
-  )
-  
-  // Add current algorithm info
-  comparison.currentAlgorithm = simulationEngine.getCurrentAlgorithm()
-  comparison.algorithmMetrics = simulationEngine.algorithmMetrics
-  
-  console.log('Sending comparison data with current algorithm:', comparison.currentAlgorithm)
-  res.json(comparison)
-})
+}
 
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id)
 
-  const allRequests = simulationEngine.getAllRequests ? simulationEngine.getAllRequests() : simulationEngine.activeRequests
-  
+  // Send initial state
   socket.emit('simulation_update', {
     elevators: simulationEngine.elevators.map(e => e.getStatus()),
-    floorRequests: simulationEngine.floorRequests,
-    activeRequests: simulationEngine.activeRequests.map(r => r.getStatus()),
+    floorRequests: simulationEngine.floorRequests.map(r => safeGetRequestStatus(r)),
+    activeRequests: simulationEngine.activeRequests.map(r => safeGetRequestStatus(r)),
     isRunning: simulationEngine.isRunning,
     currentTime: simulationEngine.currentTime,
     config: simulationEngine.config,
-    totalRequests: allRequests.length,
-    currentAlgorithm: simulationEngine.getCurrentAlgorithm()
+    currentAlgorithm: simulationEngine.getCurrentAlgorithm ? simulationEngine.getCurrentAlgorithm() : simulationEngine.config.algorithm
   })
 
   socket.on('start_simulation', (config) => {
     try {
-      console.log(`Starting simulation with config:`, config)
-      console.log(`Current algorithm: ${simulationEngine.getCurrentAlgorithm()}`)
-      
-      if (config) {
-        simulationEngine.updateConfig(config)
-      }
-      
-      if (simulationEngine.elevators.length === 0) {
-        console.log('Initializing elevators before starting simulation...')
-        simulationEngine.initialize(simulationEngine.config)
-      }
-      
+      console.log('Starting simulation with config:', config)
+      if (config) simulationEngine.updateConfig(config)
       const success = simulationEngine.start()
-      
+
       if (success) {
-        const allRequests = simulationEngine.getAllRequests ? simulationEngine.getAllRequests() : simulationEngine.activeRequests
-        
         io.emit('simulation_update', {
           elevators: simulationEngine.elevators.map(e => e.getStatus()),
-          floorRequests: simulationEngine.floorRequests,
-          activeRequests: simulationEngine.activeRequests.map(r => r.getStatus()),
+          floorRequests: simulationEngine.floorRequests.map(r => safeGetRequestStatus(r)),
+          activeRequests: simulationEngine.activeRequests.map(r => safeGetRequestStatus(r)),
           isRunning: simulationEngine.isRunning,
           currentTime: simulationEngine.currentTime,
           config: simulationEngine.config,
-          totalRequests: allRequests.length,
-          currentAlgorithm: simulationEngine.getCurrentAlgorithm()
+          currentAlgorithm: simulationEngine.getCurrentAlgorithm ? simulationEngine.getCurrentAlgorithm() : simulationEngine.config.algorithm
         })
       }
     } catch (error) {
@@ -174,18 +147,14 @@ io.on('connection', (socket) => {
     try {
       console.log('Stopping simulation')
       simulationEngine.stop()
-      
-      const allRequests = simulationEngine.getAllRequests ? simulationEngine.getAllRequests() : simulationEngine.activeRequests
-      
       io.emit('simulation_update', {
         elevators: simulationEngine.elevators.map(e => e.getStatus()),
-        floorRequests: simulationEngine.floorRequests,
-        activeRequests: simulationEngine.activeRequests.map(r => r.getStatus()),
+        floorRequests: simulationEngine.floorRequests.map(r => safeGetRequestStatus(r)),
+        activeRequests: simulationEngine.activeRequests.map(r => safeGetRequestStatus(r)),
         isRunning: simulationEngine.isRunning,
         currentTime: simulationEngine.currentTime,
         config: simulationEngine.config,
-        totalRequests: allRequests.length,
-        currentAlgorithm: simulationEngine.getCurrentAlgorithm()
+        currentAlgorithm: simulationEngine.getCurrentAlgorithm ? simulationEngine.getCurrentAlgorithm() : simulationEngine.config.algorithm
       })
     } catch (error) {
       console.error('Stop simulation error:', error)
@@ -196,20 +165,15 @@ io.on('connection', (socket) => {
   socket.on('reset_simulation', () => {
     try {
       console.log('Resetting simulation')
-      const currentAlgorithm = simulationEngine.getCurrentAlgorithm()
       simulationEngine.reset()
-      // Restore algorithm after reset
-      simulationEngine.switchAlgorithm(currentAlgorithm)
-      
       io.emit('simulation_update', {
         elevators: simulationEngine.elevators.map(e => e.getStatus()),
-        floorRequests: simulationEngine.floorRequests,
-        activeRequests: simulationEngine.activeRequests.map(r => r.getStatus()),
+        floorRequests: simulationEngine.floorRequests.map(r => safeGetRequestStatus(r)),
+        activeRequests: simulationEngine.activeRequests.map(r => safeGetRequestStatus(r)),
         isRunning: simulationEngine.isRunning,
         currentTime: simulationEngine.currentTime,
         config: simulationEngine.config,
-        totalRequests: 0,
-        currentAlgorithm: simulationEngine.getCurrentAlgorithm()
+        currentAlgorithm: simulationEngine.getCurrentAlgorithm ? simulationEngine.getCurrentAlgorithm() : simulationEngine.config.algorithm
       })
     } catch (error) {
       console.error('Reset simulation error:', error)
@@ -220,28 +184,21 @@ io.on('connection', (socket) => {
   socket.on('config_change', (config) => {
     try {
       console.log('Config change received:', config)
-      
       simulationEngine.updateConfig(config)
-      
-      const allRequests = simulationEngine.getAllRequests ? simulationEngine.getAllRequests() : simulationEngine.activeRequests
-      
       io.emit('simulation_update', {
         elevators: simulationEngine.elevators.map(e => e.getStatus()),
-        floorRequests: simulationEngine.floorRequests,
-        activeRequests: simulationEngine.activeRequests.map(r => r.getStatus()),
+        floorRequests: simulationEngine.floorRequests.map(r => safeGetRequestStatus(r)),
+        activeRequests: simulationEngine.activeRequests.map(r => safeGetRequestStatus(r)),
         isRunning: simulationEngine.isRunning,
         currentTime: simulationEngine.currentTime,
         config: simulationEngine.config,
-        totalRequests: allRequests.length,
-        currentAlgorithm: simulationEngine.getCurrentAlgorithm()
+        currentAlgorithm: simulationEngine.getCurrentAlgorithm ? simulationEngine.getCurrentAlgorithm() : simulationEngine.config.algorithm
       })
-
       socket.emit('config_updated', {
         success: true,
         config: simulationEngine.config,
         message: 'Configuration updated successfully'
       })
-
     } catch (error) {
       console.error('Config update failed:', error)
       socket.emit('config_updated', {
@@ -252,38 +209,22 @@ io.on('connection', (socket) => {
   })
 
   socket.on('add_request', (request) => {
-    console.log('=== ADD_REQUEST RECEIVED ===')
-    console.log('Raw request data:', JSON.stringify(request, null, 2))
-    console.log('Current algorithm:', simulationEngine.getCurrentAlgorithm())
-    
     try {
+      console.log('Adding request:', request)
       const requestId = simulationEngine.addRequest(request)
-      console.log('Request added with ID:', requestId)
-      
-      const allRequests = simulationEngine.getAllRequests ? simulationEngine.getAllRequests() : simulationEngine.activeRequests
-      
       io.emit('simulation_update', {
         elevators: simulationEngine.elevators.map(e => e.getStatus()),
-        floorRequests: simulationEngine.floorRequests,
-        activeRequests: simulationEngine.activeRequests.map(r => r.getStatus()),
+        floorRequests: simulationEngine.floorRequests.map(r => safeGetRequestStatus(r)),
+        activeRequests: simulationEngine.activeRequests.map(r => safeGetRequestStatus(r)),
         isRunning: simulationEngine.isRunning,
         currentTime: simulationEngine.currentTime,
         config: simulationEngine.config,
-        totalRequests: allRequests.length,
-        currentAlgorithm: simulationEngine.getCurrentAlgorithm()
+        currentAlgorithm: simulationEngine.getCurrentAlgorithm ? simulationEngine.getCurrentAlgorithm() : simulationEngine.config.algorithm
       })
-
-      socket.emit('request_added', {
-        success: true,
-        requestId: requestId
-      })
-
+      socket.emit('request_added', { success: true, requestId })
     } catch (error) {
       console.error('Add request failed:', error)
-      socket.emit('request_added', {
-        success: false,
-        error: error.message
-      })
+      socket.emit('request_added', { success: false, error: error.message })
     }
   })
 
@@ -291,18 +232,14 @@ io.on('connection', (socket) => {
     try {
       console.log('Emergency stop triggered')
       simulationEngine.emergencyStop()
-      
-      const allRequests = simulationEngine.getAllRequests ? simulationEngine.getAllRequests() : simulationEngine.activeRequests
-      
       io.emit('simulation_update', {
         elevators: simulationEngine.elevators.map(e => e.getStatus()),
-        floorRequests: simulationEngine.floorRequests,
-        activeRequests: simulationEngine.activeRequests.map(r => r.getStatus()),
+        floorRequests: simulationEngine.floorRequests.map(r => safeGetRequestStatus(r)),
+        activeRequests: simulationEngine.activeRequests.map(r => safeGetRequestStatus(r)),
         isRunning: simulationEngine.isRunning,
         currentTime: simulationEngine.currentTime,
         config: simulationEngine.config,
-        totalRequests: allRequests.length,
-        currentAlgorithm: simulationEngine.getCurrentAlgorithm()
+        currentAlgorithm: simulationEngine.getCurrentAlgorithm ? simulationEngine.getCurrentAlgorithm() : simulationEngine.config.algorithm
       })
     } catch (error) {
       console.error('Emergency stop failed:', error)
@@ -319,26 +256,20 @@ io.on('connection', (socket) => {
 setInterval(() => {
   if (simulationEngine.isRunning) {
     const systemState = simulationEngine.getState()
-    const allRequests = simulationEngine.getAllRequests ? simulationEngine.getAllRequests() : simulationEngine.activeRequests
     
-    const completeElevatorData = systemState.elevators.map(elevator => ({
-      ...elevator,
-      passengers: elevator.passengers || [],
-      requestQueue: elevator.requestQueue || [],
-      capacity: elevator.capacity || 8,
-      totalTrips: elevator.totalTrips || 0,
-      totalDistance: elevator.totalDistance || 0
-    }))
-
+    // Handle different state formats
+    const elevators = systemState.elevators || simulationEngine.elevators.map(e => e.getStatus())
+    const floorRequests = systemState.floorRequests || simulationEngine.floorRequests.map(r => safeGetRequestStatus(r))
+    const activeRequests = systemState.activeRequests || simulationEngine.activeRequests.map(r => safeGetRequestStatus(r))
+    
     io.emit('simulation_update', {
-      elevators: completeElevatorData,
-      floorRequests: systemState.floorRequests || [],
-      activeRequests: systemState.activeRequests || [],
+      elevators,
+      floorRequests,
+      activeRequests,
       isRunning: systemState.isRunning,
       currentTime: systemState.currentTime,
-      config: simulationEngine.config,
-      totalRequests: allRequests.length,
-      currentAlgorithm: simulationEngine.getCurrentAlgorithm()
+      config: systemState.config,
+      currentAlgorithm: simulationEngine.getCurrentAlgorithm ? simulationEngine.getCurrentAlgorithm() : simulationEngine.config.algorithm
     })
 
     const performanceMetrics = simulationEngine.getPerformanceMetrics()
@@ -347,37 +278,27 @@ setInterval(() => {
     io.emit('metrics_update', {
       performance: performanceMetrics,
       realTime: realTimeMetrics,
-      historical: simulationEngine.getHistoricalData(),
-      timestamp: Date.now()
+      historical: simulationEngine.getHistoricalData ? simulationEngine.getHistoricalData() : [],
+      currentAlgorithm: simulationEngine.getCurrentAlgorithm ? simulationEngine.getCurrentAlgorithm() : simulationEngine.config.algorithm
     })
-
-    try {
-      const algorithmComparison = algorithmController.compareAlgorithms(
-        simulationEngine.elevators,
-        allRequests
-      )
-      algorithmComparison.currentAlgorithm = simulationEngine.getCurrentAlgorithm()
-      io.emit('algorithm_update', algorithmComparison)
-    } catch (error) {
-      console.error('Algorithm comparison update failed:', error)
-    }
   }
 }, 1000)
 
+// Performance monitoring
 setInterval(() => {
   if (simulationEngine.isRunning) {
     const systemLoad = simulationEngine.getSystemLoad()
-    console.log(`System Load - Active Requests: ${systemLoad.activeRequests}, Avg Utilization: ${(systemLoad.averageLoad * 100).toFixed(1)}%, Algorithm: ${simulationEngine.getCurrentAlgorithm()}`)
+    const currentAlgorithm = simulationEngine.getCurrentAlgorithm ? simulationEngine.getCurrentAlgorithm() : simulationEngine.config.algorithm
+    console.log(`System Load - Active Requests: ${systemLoad.activeRequests}, Buffered: ${systemLoad.bufferedRequests || 0}, Avg Utilization: ${(systemLoad.averageLoad * 100).toFixed(1)}%, Algorithm: ${currentAlgorithm}`)
   }
 }, 5000)
 
 server.listen(PORT, () => {
-  console.log(`Elevator Simulation Server running on port ${PORT}`)
-  console.log(`Dashboard available at http://localhost:${PORT}`)
-  console.log(`WebSocket endpoint: ws://localhost:${PORT}`)
+  console.log(`🚀 Elevator Simulation Server running on port ${PORT}`)
+  console.log(`📊 Dashboard available at http://localhost:${PORT}`)
+  console.log(`🔗 WebSocket endpoint: ws://localhost:${PORT}`)
 })
 
-// Graceful shutdown
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully')

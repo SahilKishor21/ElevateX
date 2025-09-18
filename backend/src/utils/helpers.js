@@ -1,3 +1,5 @@
+// src/utils/helpers.js
+
 const generateId = () => {
   return Math.random().toString(36).substr(2, 9) + Date.now().toString(36)
 }
@@ -92,6 +94,11 @@ const validateElevatorConfig = (config) => {
     errors.push('Simulation speed must be between 0.1 and 10')
   }
   
+  // IMPORTANT: Validation for request frequency (supports 0 for no random requests)
+  if (config.requestFrequency < 0 || config.requestFrequency > 20) {
+    errors.push('Request frequency must be between 0 and 20')
+  }
+  
   return errors
 }
 
@@ -101,7 +108,8 @@ const sanitizeConfig = (config) => {
     numFloors: clamp(parseInt(config.numFloors) || 15, 2, 50),
     capacity: clamp(parseInt(config.capacity) || 8, 1, 30),
     speed: clamp(parseFloat(config.speed) || 1, 0.1, 10),
-    requestFrequency: clamp(parseFloat(config.requestFrequency) || 2, 0.1, 20)
+    // IMPORTANT: Allow 0 request frequency (stops random generation)
+    requestFrequency: clamp(parseFloat(config.requestFrequency) || 2, 0, 20)
   }
 }
 

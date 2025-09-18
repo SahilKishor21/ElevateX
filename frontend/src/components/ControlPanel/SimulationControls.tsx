@@ -114,15 +114,16 @@ const SimulationControls: React.FC = () => {
         <div className="space-y-2">
           <label className="text-sm font-medium">System Status</label>
           <div className="grid grid-cols-2 gap-4 text-sm">
+            {/* Connection and Status */}
             <div className="space-y-1">
-              <div className="flex justify-between">
+              <div className="flex justify-between items-center">
                 <span className="text-muted-foreground">Connection:</span>
                 <div className={cn(
                   "w-2 h-2 rounded-full",
                   isConnected ? "bg-green-500" : "bg-red-500"
                 )} />
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between items-center">
                 <span className="text-muted-foreground">Status:</span>
                 <span className={cn(
                   "text-xs font-medium",
@@ -133,12 +134,13 @@ const SimulationControls: React.FC = () => {
               </div>
             </div>
             
+            {/* Active and Load */}
             <div className="space-y-1">
-              <div className="flex justify-between">
+              <div className="flex justify-between items-center">
                 <span className="text-muted-foreground">Active:</span>
                 <span className="font-medium">{systemStatus.activeElevators}</span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between items-center">
                 <span className="text-muted-foreground">Load:</span>
                 <span className={cn(
                   "font-medium text-xs",

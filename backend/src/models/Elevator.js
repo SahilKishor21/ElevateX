@@ -17,6 +17,11 @@ class Elevator {
     this.loadingStartTime = null
     this.doorOpenTime = null
     this.speed = 1 // Store speed multiplier
+    
+    // FIXED: Track utilization time properly
+    this.activeTime = 0
+    this.totalOperationTime = 0
+    this.lastStateChange = Date.now()
   }
 
   // Method to update speed
@@ -27,6 +32,10 @@ class Elevator {
 
   moveTo(floor) {
     if (this.maintenanceMode || this.state === 'loading') return false
+    
+    // FIXED: Track state change for utilization
+    this.updateUtilizationTracking()
+    
     this.targetFloor = floor
     if (floor > this.currentFloor) {
       this.direction = 'up'
@@ -43,69 +52,93 @@ class Elevator {
   }
 
   update(deltaTime) {
-    const now = Date.now()
-    
-    // Apply speed multiplier to movement timing
-    const moveInterval = 2000 / (this.speed || 1)
-    const loadingInterval = 3000 / (this.speed || 1)
-    
-    // Validate state before processing
-    if (this.maintenanceMode) {
-      this.state = 'maintenance'
-      return
-    }
-    
-    switch (this.state) {
-      case 'moving_up':
-      case 'moving_down':
-        if (now - this.lastMoveTime >= moveInterval) {
-          this.currentFloor += this.direction === 'up' ? 1 : -1
-          this.totalDistance = (this.totalDistance || 0) + 1
-          this.lastMoveTime = now
-          
-          if (this.currentFloor === this.targetFloor) {
-            this.state = 'loading'
-            this.doorOpen = true
-            this.doorOpenTime = now
-            this.loadingStartTime = now
-            this.totalTrips = (this.totalTrips || 0) + 1
-          }
-        }
-        break
+  const now = Date.now()
+  
+  // Apply speed multiplier to movement timing
+  const moveInterval = 2000 / (this.speed || 1)
+  const loadingInterval = 3000 / (this.speed || 1)
+  
+  if (this.maintenanceMode) {
+    this.state = 'maintenance'
+    return
+  }
+  
+  switch (this.state) {
+    case 'moving_up':
+    case 'moving_down':
+      if (now - this.lastMoveTime >= moveInterval) {
+        this.currentFloor += this.direction === 'up' ? 1 : -1
+        this.totalDistance = (this.totalDistance || 0) + 1
+        this.lastMoveTime = now
         
-      case 'loading':
-        if (now - this.loadingStartTime >= loadingInterval) {
-          this.state = 'idle'
-          this.doorOpen = false
-          this.doorOpenTime = null
-          this.loadingStartTime = null
-          this.targetFloor = null
-          
-          // Only change direction to idle if no requests pending
-          if (!Array.isArray(this.requestQueue) || this.requestQueue.length === 0) {
-            this.direction = 'idle'
-          }
+        if (this.currentFloor === this.targetFloor) {
+          this.updateUtilizationTracking()
+          this.state = 'loading'
+          this.doorOpen = true
+          this.doorOpenTime = now
+          this.loadingStartTime = now
+          this.totalTrips = (this.totalTrips || 0) + 1
         }
-        break
-        
-      case 'idle':
-        // Process request queue only if it exists and has items
-        if (Array.isArray(this.requestQueue) && this.requestQueue.length > 0) {
-          const nextFloor = this.requestQueue.shift()
-          if (nextFloor && nextFloor !== this.currentFloor) {
-            this.moveTo(nextFloor)
-          }
-        }
-        break
-        
-      case 'maintenance':
-        // Ensure elevator stays in maintenance mode
-        this.requestQueue = []
-        this.passengers = []
+      }
+      break
+      
+    case 'loading':
+      if (now - this.loadingStartTime >= loadingInterval) {
+        this.updateUtilizationTracking()
+        this.state = 'idle'
+        this.doorOpen = false
+        this.doorOpenTime = null
+        this.loadingStartTime = null
         this.targetFloor = null
-        this.direction = 'idle'
-        break
+        
+        // Only set direction to idle if truly no requests
+        if (!Array.isArray(this.requestQueue) || this.requestQueue.length === 0) {
+          this.direction = 'idle'
+        }
+      }
+      break
+      
+    case 'idle':
+      // FIX: Only process queue if it has valid destinations
+      if (Array.isArray(this.requestQueue) && this.requestQueue.length > 0) {
+        const nextFloor = this.requestQueue[0]
+        
+        // Remove and skip if already at this floor
+        if (nextFloor === this.currentFloor) {
+          this.requestQueue.shift()
+        } else if (nextFloor && typeof nextFloor === 'number') {
+          // Only move if valid floor number
+          this.requestQueue.shift()
+          this.moveTo(nextFloor)
+        } else {
+          // Invalid entry, remove it
+          this.requestQueue.shift()
+        }
+      }
+      // Don't do anything else when idle
+      break
+      
+    case 'maintenance':
+      this.requestQueue = []
+      this.passengers = []
+      this.targetFloor = null
+      this.direction = 'idle'
+      break
+  }
+}
+
+  // FIXED: Track utilization time when state changes
+  updateUtilizationTracking() {
+    const now = Date.now()
+    const timeSinceLastChange = now - this.lastStateChange
+    
+    // If elevator was active (not idle), add to active time
+    if (this.state !== 'idle' && this.state !== 'maintenance') {
+      this.activeTime += timeSinceLastChange
     }
+    
+    this.totalOperationTime += timeSinceLastChange
+    this.lastStateChange = now
   }
 
   addRequest(floor) {
@@ -173,11 +206,44 @@ class Elevator {
     return this.passengers.length / this.capacity
   }
 
+  // FIXED: Correct utilization calculation - binary for system metrics
   getUtilization() {
-    return this.state !== 'idle' ? 1 : 0
+    // For system utilization calculations, return binary value
+    // 1 = elevator is active (moving, loading, or has pending work)
+    // 0 = elevator is truly idle
+    
+    const isActive = this.state !== 'idle' || 
+                    this.requestQueue.length > 0 || 
+                    this.passengers.length > 0 ||
+                    this.maintenanceMode
+    
+    console.log(`E${this.id} utilization: ${isActive ? 1 : 0} (state: ${this.state}, queue: ${this.requestQueue.length}, passengers: ${this.passengers.length})`)
+    
+    return isActive ? 1 : 0
+  }
+
+  // ENHANCED: Detailed utilization for advanced metrics
+  getDetailedUtilization() {
+    this.updateUtilizationTracking()
+    
+    const timeBasedUtilization = this.totalOperationTime > 0 ? 
+      (this.activeTime / this.totalOperationTime) * 100 : 0
+    
+    const capacityUtilization = (this.passengers.length / this.capacity) * 100
+    const workloadUtilization = this.requestQueue.length
+    const currentStateUtilization = this.getUtilization() * 100
+    
+    return {
+      timeBasedUtilization,
+      capacityUtilization,
+      workloadUtilization,
+      currentStateUtilization,
+      combinedUtilization: currentStateUtilization // Use current state for real-time metrics
+    }
   }
 
   setMaintenance(maintenance) {
+    this.updateUtilizationTracking()
     this.maintenanceMode = maintenance
     if (maintenance) {
       this.state = 'maintenance'
@@ -195,7 +261,8 @@ class Elevator {
     
     // Calculate accurate load and utilization
     const currentLoad = this.capacity > 0 ? validPassengers.length / this.capacity : 0
-    const isUtilized = this.state !== 'idle' || validRequestQueue.length > 0 ? 1 : 0
+    const utilization = this.getUtilization() // Use fixed utilization
+    const detailedUtil = this.getDetailedUtilization()
     
     return {
       id: this.id,
@@ -212,13 +279,15 @@ class Elevator {
       maintenanceMode: this.maintenanceMode || false,
       color: this.color || '#3b82f6',
       load: Math.min(1, Math.max(0, currentLoad)), // Clamp between 0-1
-      utilization: isUtilized,
+      utilization: utilization, // FIXED: Use binary utilization for system calculations
+      // ENHANCED: Detailed metrics for assignment requirements
+      utilizationMetrics: detailedUtil,
       // Additional debug info for frontend accuracy
       passengerCount: validPassengers.length,
       queueLength: validRequestQueue.length,
       isMoving: this.state === 'moving_up' || this.state === 'moving_down',
       isIdle: this.state === 'idle' && validRequestQueue.length === 0,
-      timestamp: Date.now() // Add timestamp for debugging stale data
+      timestamp: Date.now() 
     }
   }
 }

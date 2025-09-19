@@ -253,15 +253,17 @@ io.on('connection', (socket) => {
 })
 
 // Real-time updates
+// Real-time updates with FIXED data flow
 setInterval(() => {
   if (simulationEngine.isRunning) {
     const systemState = simulationEngine.getState()
     
-    // Handle different state formats
+    // FIXED: Ensure all data is properly structured for frontend
     const elevators = systemState.elevators || simulationEngine.elevators.map(e => e.getStatus())
     const floorRequests = systemState.floorRequests || simulationEngine.floorRequests.map(r => safeGetRequestStatus(r))
     const activeRequests = systemState.activeRequests || simulationEngine.activeRequests.map(r => safeGetRequestStatus(r))
     
+    // FIXED: Include assignment metrics in simulation update
     io.emit('simulation_update', {
       elevators,
       floorRequests,
@@ -269,18 +271,46 @@ setInterval(() => {
       isRunning: systemState.isRunning,
       currentTime: systemState.currentTime,
       config: systemState.config,
-      currentAlgorithm: simulationEngine.getCurrentAlgorithm ? simulationEngine.getCurrentAlgorithm() : simulationEngine.config.algorithm
+      currentAlgorithm: simulationEngine.getCurrentAlgorithm ? simulationEngine.getCurrentAlgorithm() : simulationEngine.config.algorithm,
+      // FIXED: Include assignment data
+      assignmentMetrics: systemState.assignmentMetrics,
+      assignmentCompliance: systemState.assignmentCompliance
     })
 
+    // FIXED: Enhanced metrics update with assignment data
     const performanceMetrics = simulationEngine.getPerformanceMetrics()
     const realTimeMetrics = simulationEngine.getRealTimeMetrics()
+    const assignmentCompliance = simulationEngine.getAssignmentCompliance ? simulationEngine.getAssignmentCompliance() : null
 
     io.emit('metrics_update', {
-      performance: performanceMetrics,
-      realTime: realTimeMetrics,
+      performance: {
+        ...performanceMetrics,
+        // FIXED: Ensure assignment metrics are included
+        assignmentCompliance: assignmentCompliance?.complianceScore || 100,
+        peakHourEfficiency: performanceMetrics.peakHourEfficiency || 100,
+        requestDistribution: performanceMetrics.requestDistribution || {
+          lobbyToUpper: 0,
+          upperToLobby: 0, 
+          interFloor: 0,
+          total: 0
+        }
+      },
+      realTime: {
+        ...realTimeMetrics,
+        // FIXED: Include assignment data in real-time metrics
+        starvationAlerts: realTimeMetrics.starvationAlerts || realTimeMetrics.alertsCount || 0,
+        peakHourStatus: realTimeMetrics.peakHourStatus || 'NORMAL',
+        complianceScore: assignmentCompliance?.complianceScore || 100
+      },
       historical: simulationEngine.getHistoricalData ? simulationEngine.getHistoricalData() : [],
-      currentAlgorithm: simulationEngine.getCurrentAlgorithm ? simulationEngine.getCurrentAlgorithm() : simulationEngine.config.algorithm
+      currentAlgorithm: simulationEngine.getCurrentAlgorithm ? simulationEngine.getCurrentAlgorithm() : simulationEngine.config.algorithm,
+      // FIXED: Include assignment metrics and compliance
+      assignmentMetrics: systemState.assignmentMetrics,
+      assignmentCompliance: assignmentCompliance
     })
+
+    // FIXED: Log data flow for debugging
+    console.log(`Data Flow Check - Starvation: ${performanceMetrics.starvationCount}, Lobby Traffic: ${systemState.assignmentMetrics?.lobbyToUpperRequests || 0}`)
   }
 }, 1000)
 
@@ -294,9 +324,9 @@ setInterval(() => {
 }, 5000)
 
 server.listen(PORT, () => {
-  console.log(`🚀 Elevator Simulation Server running on port ${PORT}`)
-  console.log(`📊 Dashboard available at http://localhost:${PORT}`)
-  console.log(`🔗 WebSocket endpoint: ws://localhost:${PORT}`)
+  console.log(`Elevator Simulation Server running on port ${PORT}`)
+  console.log(`Dashboard available at http://localhost:${PORT}`)
+  console.log(`WebSocket endpoint: ws://localhost:${PORT}`)
 })
 
 // Graceful shutdown

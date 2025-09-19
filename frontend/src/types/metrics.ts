@@ -9,6 +9,10 @@ export interface PerformanceMetrics {
   energyEfficiency: number;
   responseTime: number;
   systemReliability: number;
+  // ASSIGNMENT: New fields for enhanced backend
+  assignmentCompliance?: number;
+  peakHourEfficiency?: number;
+  requestDistribution?: RequestDistribution;
 }
 
 export interface RealTimeMetrics {
@@ -19,8 +23,37 @@ export interface RealTimeMetrics {
   peakFloorTraffic: { floor: number; requests: number }[];
   systemLoad: number;
   alertsCount: number;
+  // ASSIGNMENT: New fields
+  starvationAlerts?: number;
+  peakHourStatus?: string;
+  complianceScore?: number;
 }
 
+// ASSIGNMENT: New interfaces for enhanced metrics
+export interface RequestDistribution {
+  lobbyToUpper: number;
+  upperToLobby: number;
+  interFloor: number;
+  total: number;
+}
+
+export interface AssignmentMetrics {
+  lobbyToUpperRequests: number;
+  upperToLobbyRequests: number;
+  peakHourRequests: number;
+  starvationEvents: number;
+  thirtySecondEscalations: number;
+}
+
+export interface AssignmentCompliance {
+  lobbyTrafficPercentage: number;
+  peakHourRequests: number;
+  starvationEvents: number;
+  thirtySecondEscalations: number;
+  complianceScore: number;
+}
+
+// Keep existing interfaces unchanged
 export interface HistoricalData {
   timestamp: number;
   metrics: PerformanceMetrics;

@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { subscribeWithSelector } from 'zustand/middleware'
 import { Elevator, ElevatorState, DirectionType, FloorRequest, ElevatorConfig } from '@/types/elevator'
 import { Request } from '@/types/request'
+import { AssignmentMetrics } from '@/types/metrics' // ASSIGNMENT: Import new type
 import { DEFAULT_CONFIG } from '@/lib/constants'
 
 interface ElevatorStore {
@@ -11,11 +12,13 @@ interface ElevatorStore {
   config: ElevatorConfig
   isRunning: boolean
   currentTime: number
+  // ASSIGNMENT: Add assignment metrics to store
+  assignmentMetrics?: AssignmentMetrics
   
   setElevators: (elevators: Elevator[]) => void
   updateElevator: (id: number, updates: Partial<Elevator>) => void
   setFloorRequests: (requests: FloorRequest[]) => void
-  addFloorRequest: (floor: number, direction: DirectionType) => void // Make sure this exists
+  addFloorRequest: (floor: number, direction: DirectionType) => void
   removeFloorRequest: (floor: number, direction: DirectionType) => void
   setActiveRequests: (requests: Request[]) => void
   addRequest: (request: Request) => void
@@ -23,6 +26,8 @@ interface ElevatorStore {
   updateConfig: (updates: Partial<ElevatorConfig>) => void
   setIsRunning: (running: boolean) => void
   setCurrentTime: (time: number) => void
+  // ASSIGNMENT: Add assignment metrics setter
+  setAssignmentMetrics: (metrics: AssignmentMetrics) => void
   resetSystem: () => void
 }
 
@@ -40,6 +45,14 @@ export const useElevatorStore = create<ElevatorStore>()(
     },
     isRunning: false,
     currentTime: 0,
+    // ASSIGNMENT: Initialize assignment metrics
+    assignmentMetrics: {
+      lobbyToUpperRequests: 0,
+      upperToLobbyRequests: 0,
+      peakHourRequests: 0,
+      starvationEvents: 0,
+      thirtySecondEscalations: 0
+    },
 
     setElevators: (elevators) => set({ elevators }),
 
@@ -100,6 +113,9 @@ export const useElevatorStore = create<ElevatorStore>()(
 
     setCurrentTime: (currentTime) => set({ currentTime }),
 
+    // ASSIGNMENT: Add assignment metrics setter
+    setAssignmentMetrics: (assignmentMetrics) => set({ assignmentMetrics }),
+
     resetSystem: () =>
       set({
         elevators: [],
@@ -107,6 +123,14 @@ export const useElevatorStore = create<ElevatorStore>()(
         activeRequests: [],
         isRunning: false,
         currentTime: 0,
+        // ASSIGNMENT: Reset assignment metrics
+        assignmentMetrics: {
+          lobbyToUpperRequests: 0,
+          upperToLobbyRequests: 0,
+          peakHourRequests: 0,
+          starvationEvents: 0,
+          thirtySecondEscalations: 0
+        }
       }),
   }))
 )

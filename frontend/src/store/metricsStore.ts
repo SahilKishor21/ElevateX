@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { PerformanceMetrics, RealTimeMetrics, HistoricalData, Alert, ChartDataPoint } from '@/types/metrics'
+import { PerformanceMetrics, RealTimeMetrics, HistoricalData, Alert, ChartDataPoint, AssignmentMetrics, AssignmentCompliance } from '@/types/metrics'
 
 interface MetricsStore {
   performanceMetrics: PerformanceMetrics
@@ -11,6 +11,9 @@ interface MetricsStore {
     utilization: ChartDataPoint[]
     throughput: ChartDataPoint[]
   }
+  // ASSIGNMENT: Add assignment metrics to store
+  assignmentMetrics?: AssignmentMetrics
+  assignmentCompliance?: AssignmentCompliance
   
   updatePerformanceMetrics: (metrics: Partial<PerformanceMetrics>) => void
   updateRealTimeMetrics: (metrics: Partial<RealTimeMetrics>) => void
@@ -19,6 +22,9 @@ interface MetricsStore {
   acknowledgeAlert: (id: string) => void
   clearAlerts: () => void
   updateChartData: (type: keyof MetricsStore['chartData'], data: ChartDataPoint[]) => void
+  // ASSIGNMENT: Add assignment metrics methods
+  updateAssignmentMetrics: (metrics: AssignmentMetrics) => void
+  updateAssignmentCompliance: (compliance: AssignmentCompliance) => void
   resetMetrics: () => void
 }
 
@@ -33,6 +39,15 @@ const initialPerformanceMetrics: PerformanceMetrics = {
   energyEfficiency: 85,
   responseTime: 0,
   systemReliability: 100,
+  // ASSIGNMENT: Initialize new fields
+  assignmentCompliance: 100,
+  peakHourEfficiency: 100,
+  requestDistribution: {
+    lobbyToUpper: 0,
+    upperToLobby: 0,
+    interFloor: 0,
+    total: 0
+  }
 }
 
 const initialRealTimeMetrics: RealTimeMetrics = {
@@ -43,6 +58,10 @@ const initialRealTimeMetrics: RealTimeMetrics = {
   peakFloorTraffic: [],
   systemLoad: 0,
   alertsCount: 0,
+  // ASSIGNMENT: Initialize new fields
+  starvationAlerts: 0,
+  peakHourStatus: 'NORMAL',
+  complianceScore: 100
 }
 
 export const useMetricsStore = create<MetricsStore>((set, get) => ({
@@ -54,6 +73,21 @@ export const useMetricsStore = create<MetricsStore>((set, get) => ({
     waitTime: [],
     utilization: [],
     throughput: [],
+  },
+  // ASSIGNMENT: Initialize assignment metrics
+  assignmentMetrics: {
+    lobbyToUpperRequests: 0,
+    upperToLobbyRequests: 0,
+    peakHourRequests: 0,
+    starvationEvents: 0,
+    thirtySecondEscalations: 0
+  },
+  assignmentCompliance: {
+    lobbyTrafficPercentage: 0,
+    peakHourRequests: 0,
+    starvationEvents: 0,
+    thirtySecondEscalations: 0,
+    complianceScore: 100
   },
 
   updatePerformanceMetrics: (metrics) =>
@@ -97,6 +131,13 @@ export const useMetricsStore = create<MetricsStore>((set, get) => ({
       },
     })),
 
+  // ASSIGNMENT: Assignment metrics methods
+  updateAssignmentMetrics: (assignmentMetrics) =>
+    set({ assignmentMetrics }),
+
+  updateAssignmentCompliance: (assignmentCompliance) =>
+    set({ assignmentCompliance }),
+
   resetMetrics: () =>
     set({
       performanceMetrics: initialPerformanceMetrics,
@@ -108,6 +149,21 @@ export const useMetricsStore = create<MetricsStore>((set, get) => ({
         utilization: [],
         throughput: [],
       },
+      // ASSIGNMENT: Reset assignment metrics
+      assignmentMetrics: {
+        lobbyToUpperRequests: 0,
+        upperToLobbyRequests: 0,
+        peakHourRequests: 0,
+        starvationEvents: 0,
+        thirtySecondEscalations: 0
+      },
+      assignmentCompliance: {
+        lobbyTrafficPercentage: 0,
+        peakHourRequests: 0,
+        starvationEvents: 0,
+        thirtySecondEscalations: 0,
+        complianceScore: 100
+      }
     }),
 }))
 
@@ -116,3 +172,8 @@ export const selectActiveRequests = (state: MetricsStore) => state.realTimeMetri
 export const selectSystemLoad = (state: MetricsStore) => state.realTimeMetrics.systemLoad
 export const selectUnacknowledgedAlerts = (state: MetricsStore) => 
   state.alerts.filter(alert => !alert.acknowledged).length
+// ASSIGNMENT: New selectors
+export const selectAssignmentCompliance = (state: MetricsStore) => 
+  state.performanceMetrics.assignmentCompliance || 100
+export const selectPeakHourStatus = (state: MetricsStore) => 
+  state.realTimeMetrics.peakHourStatus || 'NORMAL'

@@ -36,16 +36,16 @@ class PriorityCalculator {
     // STARVATION FIX: Much more aggressive escalation to prevent starvation
     if (waitSeconds > 90) {
       bias += 200  // CRITICAL - Must be served immediately
-      console.log(`🚨 CRITICAL STARVATION: Request ${request.id} waiting ${waitSeconds.toFixed(1)}s - Priority boost: +200`)
+      console.log(`ðŸš¨ CRITICAL STARVATION: Request ${request.id} waiting ${waitSeconds.toFixed(1)}s - Priority boost: +200`)
     } else if (waitSeconds > 60) {
       bias += 150  // SEVERE - Assignment requirement violated
-      console.log(`🚨 SEVERE STARVATION: Request ${request.id} waiting ${waitSeconds.toFixed(1)}s - Priority boost: +150`)
+      console.log(`ðŸš¨ SEVERE STARVATION: Request ${request.id} waiting ${waitSeconds.toFixed(1)}s - Priority boost: +150`)
     } else if (waitSeconds > 45) {
       bias += 100  // MODERATE - Preventive escalation
-      console.log(`⚠️ MODERATE STARVATION: Request ${request.id} waiting ${waitSeconds.toFixed(1)}s - Priority boost: +100`)
+      console.log(`âš ï¸ MODERATE STARVATION: Request ${request.id} waiting ${waitSeconds.toFixed(1)}s - Priority boost: +100`)
     } else if (waitSeconds > 30) {
       bias += 75   // EARLY - Assignment escalation point
-      console.log(`⚠️ EARLY STARVATION: Request ${request.id} waiting ${waitSeconds.toFixed(1)}s - Priority boost: +75`)
+      console.log(`âš ï¸ EARLY STARVATION: Request ${request.id} waiting ${waitSeconds.toFixed(1)}s - Priority boost: +75`)
     }
     
     // ASSIGNMENT REQUIREMENT: "Prioritize lobby-to-upper-floor requests during morning rush"

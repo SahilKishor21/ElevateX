@@ -24,7 +24,8 @@ const ElevatorShaft: React.FC = () => {
     const elevatorWidth = Math.max(65, baseElevatorWidth * elevatorWidthScale)
     
     const shaftSpacing = Math.max(8, elevatorWidth * 0.15)
-    const sideMargin = 20
+    const sideMargin = 30
+    
     const floorIndicatorWidth = 140
     
     // Total dimensions
@@ -87,13 +88,13 @@ const ElevatorShaft: React.FC = () => {
         </div>
 
         {/* Main Simulation Area */}
-        <div className="flex-1 bg-gray-100/20 backdrop-blur-sm rounded-xl border border-gray-200/50 overflow-hidden dark:bg-slate-800/20 dark:border-slate-700/50">
-          <div className="h-full overflow-auto p-4">
+        <div className="flex-1 bg-gray-100/20 backdrop-blur-sm rounded-xl border border-gray-200/50 overflow-hidden dark:bg-slate-800/20 dark:border-slate-700/50 no-scrollbar">
+          <div className="h-full overflow-auto p-4 no-scrollbar">
             <div 
               className="relative mx-auto bg-gray-200/30 rounded-xl border border-gray-300/30 shadow-2xl dark:bg-slate-900/30 dark:border-slate-600/30"
               style={{ 
                 width: `${dimensions.totalWidth}px`,
-                height: `${dimensions.totalHeight + 40}px`,
+                height: `${dimensions.totalHeight}px`,
                 minWidth: '600px',
                 minHeight: '400px'
               }}
@@ -117,14 +118,14 @@ const ElevatorShaft: React.FC = () => {
                     key={`h-grid-${i}`}
                     className="absolute left-0 right-0 h-px bg-gray-300/20 dark:bg-slate-600/20"
                     style={{
-                      top: `${20 + (i * dimensions.floorHeight)}px`
+                      top: `${i * dimensions.floorHeight}px`
                     }}
                   />
                 ))}
               </div>
 
               {/* Floor Numbers (Left Side) */}
-              <div className="absolute left-2 top-5" style={{ width: '15px' }}>
+              <div className="absolute left-0 top-0" style={{ width: '15px' }}>
                 {Array.from({ length: config.numFloors }, (_, i) => {
                   const floor = config.numFloors - i
                   return (
@@ -145,7 +146,7 @@ const ElevatorShaft: React.FC = () => {
 
               {/* Elevator Shafts */}
               <div 
-                className="absolute top-5" 
+                className="absolute top-0" 
                 style={{
                   left: `${dimensions.shaftStartX}px`,
                   width: `${dimensions.shaftAreaWidth}px`,
@@ -195,7 +196,7 @@ const ElevatorShaft: React.FC = () => {
 
               {/* Floor Controls (Right Side) */}
               <div 
-                className="absolute top-5"
+                className="absolute top-0"
                 style={{
                   left: `${dimensions.floorIndicatorX}px`,
                   width: `${dimensions.floorIndicatorWidth}px`,

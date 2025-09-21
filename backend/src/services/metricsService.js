@@ -1,6 +1,7 @@
 class MetricsService {
   constructor() {
     this.reset()
+    this.debug = process.env.NODE_ENV === 'development'
   }
 
   reset() {
@@ -15,35 +16,52 @@ class MetricsService {
       starvationEvents: 0,
       thirtySecondEscalations: 0
     }
+    
+    if (this.debug) {
+      console.log('MetricsService: Reset complete')
+    }
   }
 
   update(elevators, activeRequests) {
     const now = Date.now()
     
-    const servedRequests = this.requestHistory.filter(r => r.isServed)
-    // FIXED: Use finalWaitTime if available, otherwise use waitTime
-    const waitTimes = servedRequests.map(r => this.getActualWaitTime(r)).filter(t => t > 0)
+    // FIXED: Ensure we're working with arrays
+    const validActiveRequests = Array.isArray(activeRequests) ? activeRequests : []
+    const validElevators = Array.isArray(elevators) ? elevators : []
     
-    // FIXED: Calculate starvation count correctly - include ALL requests with >60s wait
-    const allActiveRequests = Array.isArray(activeRequests) ? activeRequests : []
-    const currentStarvationCount = allActiveRequests.filter(r => {
-      if (r && typeof r.waitTime === 'number') {
-        return r.waitTime > 60000 && r.isActive && !r.isServed
-      }
-      return false
+    // FIXED: Get served requests from history and calculate wait times properly
+    const servedRequests = this.requestHistory.filter(r => r && r.isServed)
+    const waitTimes = servedRequests
+      .map(r => this.getActualWaitTime(r))
+      .filter(t => typeof t === 'number' && t > 0)
+    
+    // Calculate current starvation count from active requests
+    const currentStarvationCount = validActiveRequests.filter(r => {
+      if (!r || typeof r.waitTime !== 'number') return false
+      return r.waitTime > 60000 && r.isActive && !r.isServed
     }).length
 
-    console.log(`MetricsService: Starvation count calculation - Active: ${allActiveRequests.length}, Starving: ${currentStarvationCount}`)
+    // Log wait time calculation details
+    if (this.debug) {
+      console.log(`MetricsService Update:`, {
+        servedRequestsTotal: servedRequests.length,
+        validWaitTimes: waitTimes.length,
+        waitTimesArray: waitTimes.slice(-5), // Last 5 wait times
+        averageWaitTime: waitTimes.length > 0 ? waitTimes.reduce((a, b) => a + b, 0) / waitTimes.length : 0,
+        currentStarvationCount,
+        activeRequestsCount: validActiveRequests.length
+      })
+    }
     
     const metrics = {
       timestamp: now,
       averageWaitTime: waitTimes.length > 0 ? waitTimes.reduce((a, b) => a + b, 0) / waitTimes.length : 0,
       maxWaitTime: waitTimes.length > 0 ? Math.max(...waitTimes) : 0,
-      elevatorUtilization: elevators.map(e => e.getUtilization()),
-      activeRequests: allActiveRequests.length,
-      starvationCount: currentStarvationCount, // FIXED: Use calculated count
+      elevatorUtilization: validElevators.map(e => this.getElevatorUtilization(e)),
+      activeRequests: validActiveRequests.length,
+      starvationCount: currentStarvationCount,
       throughput: this.calculateThroughput(),
-      systemLoad: this.calculateSystemLoad(elevators, allActiveRequests)
+      systemLoad: this.calculateSystemLoad(validElevators, validActiveRequests)
     }
 
     this.performanceHistory.push(metrics)
@@ -56,57 +74,111 @@ class MetricsService {
     const historicalEntry = {
       timestamp: now,
       metrics: this.getPerformanceMetrics(),
-      requests: allActiveRequests.length
+      requests: validActiveRequests.length
     }
     
     this.historicalData.push(historicalEntry)
     if (this.historicalData.length > 50) {
       this.historicalData.shift()
     }
+
+    if (this.debug && (currentStarvationCount > 0 || waitTimes.length > 0)) {
+      console.log(`MetricsService: Updated - Avg wait: ${Math.round(metrics.averageWaitTime/1000)}s, Starvation: ${currentStarvationCount}`)
+    }
+  }
+
+  // FIXED: Helper method to get elevator utilization safely
+  getElevatorUtilization(elevator) {
+    if (!elevator) return 0
+    
+    if (typeof elevator.getUtilization === 'function') {
+      return elevator.getUtilization()
+    }
+    
+    // Fallback calculation
+    if (elevator.state === 'idle') return 0
+    if (elevator.state === 'maintenance') return 0
+    
+    // Moving or loading = high utilization
+    if (elevator.state === 'moving_up' || elevator.state === 'moving_down' || elevator.state === 'loading') {
+      return 0.8
+    }
+    
+    return 0.5 // Default for unknown states
   }
 
   // FIXED: Helper method to get the correct wait time
   getActualWaitTime(request) {
-    if (request.finalWaitTime !== null && request.finalWaitTime !== undefined) {
+    if (!request) return 0
+    
+    // Use finalWaitTime if it was captured when request was served
+    if (typeof request.finalWaitTime === 'number' && request.finalWaitTime >= 0) {
       return request.finalWaitTime
     }
-    return request.waitTime || 0
+    
+    // Fallback to waitTime
+    if (typeof request.waitTime === 'number' && request.waitTime >= 0) {
+      return request.waitTime
+    }
+    
+    // Calculate from timestamps if available
+    if (request.servedAt && request.timestamp) {
+      return request.servedAt - request.timestamp
+    }
+    
+    return 0
   }
 
   calculateThroughput() {
     const oneHourAgo = Date.now() - 3600000
-    const recentRequests = this.requestHistory.filter(r => r.servedAt && r.servedAt > oneHourAgo)
+    const recentRequests = this.requestHistory.filter(r => 
+      r && r.servedAt && r.servedAt > oneHourAgo
+    )
     return recentRequests.length
   }
 
-  // FIXED: System load calculation - properly weight utilization
+  // FIXED: System load calculation with better error handling
   calculateSystemLoad(elevators, activeRequests) {
-    if (!elevators || elevators.length === 0) return 0
+    if (!Array.isArray(elevators) || elevators.length === 0) return 0
     
-    // FIXED: Calculate actual elevator utilization correctly
-    const activeElevators = elevators.filter(e => e.state !== 'idle' && e.state !== 'maintenance').length
+    // Calculate actual elevator utilization correctly
+    const activeElevators = elevators.filter(e => 
+      e && e.state !== 'idle' && e.state !== 'maintenance'
+    ).length
     const utilizationRate = activeElevators / elevators.length
     
     // Request load factor
     const requestLoad = Math.min(activeRequests.length / (elevators.length * 10), 1)
     
     // Capacity utilization
-    const totalCapacity = elevators.reduce((sum, e) => sum + (e.capacity || 8), 0)
-    const currentLoad = elevators.reduce((sum, e) => sum + (e.passengers?.length || 0), 0)
+    const totalCapacity = elevators.reduce((sum, e) => {
+      if (!e) return sum
+      return sum + (e.capacity || 8)
+    }, 0)
+    
+    const currentLoad = elevators.reduce((sum, e) => {
+      if (!e || !e.passengers) return sum
+      return sum + (Array.isArray(e.passengers) ? e.passengers.length : 0)
+    }, 0)
+    
     const capacityUtilization = totalCapacity > 0 ? currentLoad / totalCapacity : 0
     
     // Weighted average: 40% elevator state, 30% requests, 30% capacity
     const systemLoad = (utilizationRate * 0.4) + (requestLoad * 0.3) + (capacityUtilization * 0.3)
     
-    console.log(`MetricsService: System load - Active elevators: ${activeElevators}/${elevators.length} (${(utilizationRate*100).toFixed(1)}%), Load: ${(systemLoad*100).toFixed(1)}%`)
+    if (this.debug && systemLoad > 0.5) {
+      console.log(`MetricsService: High system load - Active: ${activeElevators}/${elevators.length}, Load: ${(systemLoad*100).toFixed(1)}%`)
+    }
     
     return Math.min(systemLoad, 1)
   }
 
   getPerformanceMetrics() {
     const recent = this.performanceHistory.slice(-10)
+    
+    // Return default metrics if no history
     if (recent.length === 0) {
-      return {
+      const defaultMetrics = {
         averageWaitTime: 0,
         maxWaitTime: 0,
         averageTravelTime: 0,
@@ -117,35 +189,43 @@ class MetricsService {
         energyEfficiency: 85,
         responseTime: 0,
         systemReliability: 100,
-        // ASSIGNMENT: Include assignment metrics
         assignmentCompliance: this.calculateAssignmentCompliance(),
         peakHourEfficiency: this.calculatePeakHourEfficiency(),
         requestDistribution: this.getRequestDistribution()
       }
+      
+      if (this.debug) {
+        console.log('MetricsService: Returning default metrics (no history)')
+      }
+      
+      return defaultMetrics
     }
 
     const latest = recent[recent.length - 1]
     const avgUtilization = latest.elevatorUtilization.length > 0 ? 
       latest.elevatorUtilization.reduce((a, b) => a + b, 0) / latest.elevatorUtilization.length : 0
     
-    console.log(`MetricsService: Performance metrics - Starvation: ${latest.starvationCount}, Avg utilization: ${(avgUtilization*100).toFixed(1)}%`)
-    
-    return {
-      averageWaitTime: latest.averageWaitTime / 1000,
-      maxWaitTime: latest.maxWaitTime / 1000,
+    const performanceMetrics = {
+      averageWaitTime: latest.averageWaitTime / 1000, // Convert to seconds
+      maxWaitTime: latest.maxWaitTime / 1000, // Convert to seconds
       averageTravelTime: this.calculateAverageTravelTime(),
       elevatorUtilization: latest.elevatorUtilization,
       throughput: latest.throughput,
-      starvationCount: latest.starvationCount, // FIXED: Pass through the calculated count
+      starvationCount: latest.starvationCount,
       userSatisfactionScore: this.calculateSatisfactionScore(latest),
       energyEfficiency: Math.max(50, 100 - (avgUtilization * 30)),
-      responseTime: latest.averageWaitTime / 1000,
+      responseTime: latest.averageWaitTime / 1000, // Convert to seconds
       systemReliability: latest.starvationCount === 0 ? 100 : Math.max(70, 100 - latest.starvationCount * 5),
-      // ASSIGNMENT: Include assignment metrics
       assignmentCompliance: this.calculateAssignmentCompliance(),
       peakHourEfficiency: this.calculatePeakHourEfficiency(),
       requestDistribution: this.getRequestDistribution()
     }
+    
+    if (this.debug) {
+      console.log(`MetricsService: Performance metrics - Avg wait: ${performanceMetrics.averageWaitTime.toFixed(1)}s, Starvation: ${performanceMetrics.starvationCount}`)
+    }
+    
+    return performanceMetrics
   }
 
   // ASSIGNMENT: Calculate assignment compliance score
@@ -204,53 +284,91 @@ class MetricsService {
 
   // ASSIGNMENT: Get request distribution
   getRequestDistribution() {
+    const interFloorRequests = Math.max(0, 
+      this.requestHistory.length - 
+      this.assignmentMetrics.lobbyToUpperRequests - 
+      this.assignmentMetrics.upperToLobbyRequests
+    )
+    
     return {
       lobbyToUpper: this.assignmentMetrics.lobbyToUpperRequests,
       upperToLobby: this.assignmentMetrics.upperToLobbyRequests,
-      interFloor: Math.max(0, this.requestHistory.length - this.assignmentMetrics.lobbyToUpperRequests - this.assignmentMetrics.upperToLobbyRequests),
+      interFloor: interFloorRequests,
       total: this.requestHistory.length
     }
   }
 
   // ASSIGNMENT: Update assignment metrics from simulation engine
   updateAssignmentMetrics(metrics) {
-    if (metrics) {
+    if (metrics && typeof metrics === 'object') {
       this.assignmentMetrics = { ...this.assignmentMetrics, ...metrics }
-      console.log(`MetricsService: Assignment metrics updated:`, this.assignmentMetrics)
+      if (this.debug) {
+        console.log(`MetricsService: Assignment metrics updated:`, this.assignmentMetrics)
+      }
     }
   }
 
   getRealTimeMetrics(elevators, activeRequests) {
-    const elevatorsInMotion = elevators.filter(e => e.state === 'moving_up' || e.state === 'moving_down').length
-    const averageLoadFactor = elevators.length > 0 ? elevators.reduce((sum, e) => sum + e.getLoad(), 0) / elevators.length : 0
+    const validElevators = Array.isArray(elevators) ? elevators : []
+    const validActiveRequests = Array.isArray(activeRequests) ? activeRequests : []
     
-    // FIXED: Calculate current starvation alerts
-    const starvationAlerts = activeRequests.filter(r => {
-      if (r && typeof r.waitTime === 'number') {
-        return r.waitTime > 60000 && r.isActive && !r.isServed
-      }
-      return false
+    const elevatorsInMotion = validElevators.filter(e => 
+      e && (e.state === 'moving_up' || e.state === 'moving_down')
+    ).length
+    
+    const averageLoadFactor = validElevators.length > 0 ? 
+      validElevators.reduce((sum, e) => sum + this.getElevatorLoad(e), 0) / validElevators.length : 0
+    
+    // Calculate current starvation alerts
+    const starvationAlerts = validActiveRequests.filter(r => {
+      if (!r || typeof r.waitTime !== 'number') return false
+      return r.waitTime > 60000 && r.isActive && !r.isServed
     }).length
     
     const hour = new Date().getHours()
     const isPeakHour = [8, 9, 12, 13, 17, 18].includes(hour)
     
-    return {
+    const realTimeMetrics = {
       currentTime: Date.now(),
-      activeRequests: activeRequests.length,
+      activeRequests: validActiveRequests.length,
       elevatorsInMotion,
       averageLoadFactor,
-      systemLoad: this.calculateSystemLoad(elevators, activeRequests),
+      systemLoad: this.calculateSystemLoad(validElevators, validActiveRequests),
       alertsCount: starvationAlerts,
-      // ASSIGNMENT: Real-time assignment metrics
       starvationAlerts: starvationAlerts,
       peakHourStatus: isPeakHour ? 'ACTIVE' : 'NORMAL',
       complianceScore: this.calculateAssignmentCompliance()
     }
+    
+    if (this.debug && starvationAlerts > 0) {
+      console.log(`MetricsService: Real-time alerts - Starvation: ${starvationAlerts}`)
+    }
+    
+    return realTimeMetrics
+  }
+
+  // Helper method to get elevator load safely
+  getElevatorLoad(elevator) {
+    if (!elevator) return 0
+    
+    if (typeof elevator.getLoad === 'function') {
+      return elevator.getLoad()
+    }
+    
+    // Fallback calculation
+    if (!elevator.passengers) return 0
+    
+    const passengerCount = Array.isArray(elevator.passengers) ? elevator.passengers.length : 0
+    const capacity = elevator.capacity || 8
+    
+    return capacity > 0 ? passengerCount / capacity : 0
   }
 
   calculateAverageTravelTime() {
-    const servedRequests = this.requestHistory.filter(r => r.isServed && r.getTravelTime && r.getTravelTime() > 0)
+    const servedRequests = this.requestHistory.filter(r => 
+      r && r.isServed && typeof r.getTravelTime === 'function' && r.getTravelTime() > 0
+    )
+    
     if (servedRequests.length === 0) return 0
     
     const totalTravelTime = servedRequests.reduce((sum, r) => sum + r.getTravelTime(), 0)
@@ -272,6 +390,13 @@ class MetricsService {
   }
 
   addRequestToHistory(request) {
+    if (!request) return
+    
+    // Ensure request has proper wait time calculated
+    if (typeof request.updateWaitTime === 'function') {
+      request.updateWaitTime()
+    }
+    
     this.requestHistory.push(request)
     
     // ASSIGNMENT: Track request patterns
@@ -285,6 +410,9 @@ class MetricsService {
     const finalWaitTime = this.getActualWaitTime(request)
     if (finalWaitTime > 60000) {
       this.assignmentMetrics.starvationEvents++
+      if (this.debug) {
+        console.log(`MetricsService: Starvation event recorded - wait time: ${Math.round(finalWaitTime/1000)}s`)
+      }
     }
     
     // Track 30-second escalations
@@ -300,11 +428,15 @@ class MetricsService {
     if (this.requestHistory.length > 1000) {
       this.requestHistory.shift()
     }
+    
+    if (this.debug) {
+      console.log(`MetricsService: Added request to history - wait time: ${Math.round(finalWaitTime/1000)}s`)
+    }
   }
 
   // ASSIGNMENT: Get assignment metrics for frontend
   getAssignmentMetrics() {
-    return this.assignmentMetrics
+    return { ...this.assignmentMetrics }
   }
 
   // ASSIGNMENT: Get assignment compliance details

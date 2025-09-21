@@ -1,136 +1,109 @@
 import { create } from 'zustand'
-import { subscribeWithSelector } from 'zustand/middleware'
-import { Elevator, ElevatorState, DirectionType, FloorRequest, ElevatorConfig } from '@/types/elevator'
+import { Elevator, ElevatorConfig } from '@/types/elevator'
 import { Request } from '@/types/request'
-import { AssignmentMetrics } from '@/types/metrics' // ASSIGNMENT: Import new type
-import { DEFAULT_CONFIG } from '@/lib/constants'
+
+interface FloorRequest {
+  floor: number
+  direction: 'up' | 'down'
+  timestamp: number
+  active: boolean
+}
 
 interface ElevatorStore {
   elevators: Elevator[]
-  floorRequests: FloorRequest[]
-  activeRequests: Request[]
   config: ElevatorConfig
   isRunning: boolean
   currentTime: number
-  // ASSIGNMENT: Add assignment metrics to store
-  assignmentMetrics?: AssignmentMetrics
+  floorRequests: FloorRequest[] // CRITICAL: Floor requests state
+  activeRequests: Request[]
+  assignmentMetrics?: any
   
   setElevators: (elevators: Elevator[]) => void
-  updateElevator: (id: number, updates: Partial<Elevator>) => void
-  setFloorRequests: (requests: FloorRequest[]) => void
-  addFloorRequest: (floor: number, direction: DirectionType) => void
-  removeFloorRequest: (floor: number, direction: DirectionType) => void
-  setActiveRequests: (requests: Request[]) => void
-  addRequest: (request: Request) => void
-  removeRequest: (id: string) => void
+  setConfig: (config: ElevatorConfig) => void
   updateConfig: (updates: Partial<ElevatorConfig>) => void
   setIsRunning: (running: boolean) => void
   setCurrentTime: (time: number) => void
-  // ASSIGNMENT: Add assignment metrics setter
-  setAssignmentMetrics: (metrics: AssignmentMetrics) => void
-  resetSystem: () => void
+  setFloorRequests: (requests: FloorRequest[]) => void // CRITICAL: Setter for floor requests
+  addFloorRequest: (floor: number, direction: 'up' | 'down') => void // CRITICAL: Add individual floor request
+  setActiveRequests: (requests: Request[]) => void
+  setAssignmentMetrics: (metrics: any) => void
+  reset: () => void
 }
 
-export const useElevatorStore = create<ElevatorStore>()(
-  subscribeWithSelector((set, get) => ({
+const defaultConfig: ElevatorConfig = {
+  numElevators: 4,
+  numFloors: 20,
+  capacity: 8,
+  speed: 1,
+  requestFrequency: 5
+}
+
+export const useElevatorStore = create<ElevatorStore>((set, get) => ({
+  elevators: [],
+  config: defaultConfig,
+  isRunning: false,
+  currentTime: 0,
+  floorRequests: [], // CRITICAL: Initialize floor requests
+  activeRequests: [],
+  assignmentMetrics: undefined,
+
+  setElevators: (elevators) => set({ elevators }),
+  
+  setConfig: (config) => set({ config }),
+  
+  updateConfig: (updates) => set((state) => ({
+    config: { ...state.config, ...updates }
+  })),
+  
+  setIsRunning: (isRunning) => set({ isRunning }),
+  
+  setCurrentTime: (currentTime) => set({ currentTime }),
+  
+  // CRITICAL: Set floor requests from server
+  setFloorRequests: (floorRequests) => {
+    console.log('Store - Setting floor requests:', floorRequests)
+    set({ floorRequests })
+  },
+  
+  // CRITICAL: Add individual floor request
+  addFloorRequest: (floor, direction) => {
+    console.log(`Store - Adding floor request: Floor ${floor}, Direction ${direction}`)
+    set((state) => {
+      // Check if request already exists
+      const exists = state.floorRequests.some(
+        req => req.floor === floor && req.direction === direction && req.active
+      )
+      
+      if (exists) {
+        console.log('Floor request already exists, skipping')
+        return state
+      }
+      
+      const newRequest: FloorRequest = {
+        floor,
+        direction,
+        timestamp: Date.now(),
+        active: true
+      }
+      
+      const newFloorRequests = [...state.floorRequests, newRequest]
+      console.log('Store - New floor requests array:', newFloorRequests)
+      
+      return { floorRequests: newFloorRequests }
+    })
+  },
+  
+  setActiveRequests: (activeRequests) => set({ activeRequests }),
+  
+  setAssignmentMetrics: (assignmentMetrics) => set({ assignmentMetrics }),
+  
+  reset: () => set({
     elevators: [],
-    floorRequests: [],
-    activeRequests: [],
-    config: {
-      numElevators: DEFAULT_CONFIG.NUM_ELEVATORS,
-      numFloors: DEFAULT_CONFIG.NUM_FLOORS,
-      capacity: DEFAULT_CONFIG.ELEVATOR_CAPACITY,
-      speed: DEFAULT_CONFIG.SIMULATION_SPEED,
-      requestFrequency: DEFAULT_CONFIG.REQUEST_FREQUENCY,
-    },
     isRunning: false,
     currentTime: 0,
-    // ASSIGNMENT: Initialize assignment metrics
-    assignmentMetrics: {
-      lobbyToUpperRequests: 0,
-      upperToLobbyRequests: 0,
-      peakHourRequests: 0,
-      starvationEvents: 0,
-      thirtySecondEscalations: 0
-    },
-
-    setElevators: (elevators) => set({ elevators }),
-
-    updateElevator: (id, updates) =>
-      set((state) => ({
-        elevators: state.elevators.map((elevator) =>
-          elevator.id === id ? { ...elevator, ...updates } : elevator
-        ),
-      })),
-
-    setFloorRequests: (floorRequests) => set({ floorRequests }),
-
-    addFloorRequest: (floor, direction) =>
-      set((state) => {
-        const exists = state.floorRequests.some(
-          (req) => req.floor === floor && req.direction === direction
-        )
-        if (exists) return state
-
-        return {
-          floorRequests: [
-            ...state.floorRequests,
-            {
-              floor,
-              direction,
-              timestamp: Date.now(),
-              active: true,
-            },
-          ],
-        }
-      }),
-
-    removeFloorRequest: (floor, direction) =>
-      set((state) => ({
-        floorRequests: state.floorRequests.filter(
-          (req) => !(req.floor === floor && req.direction === direction)
-        ),
-      })),
-
-    setActiveRequests: (activeRequests) => set({ activeRequests }),
-
-    addRequest: (request) =>
-      set((state) => ({
-        activeRequests: [...state.activeRequests, request],
-      })),
-
-    removeRequest: (id) =>
-      set((state) => ({
-        activeRequests: state.activeRequests.filter((req) => req.id !== id),
-      })),
-
-    updateConfig: (updates) =>
-      set((state) => ({
-        config: { ...state.config, ...updates },
-      })),
-
-    setIsRunning: (isRunning) => set({ isRunning }),
-
-    setCurrentTime: (currentTime) => set({ currentTime }),
-
-    // ASSIGNMENT: Add assignment metrics setter
-    setAssignmentMetrics: (assignmentMetrics) => set({ assignmentMetrics }),
-
-    resetSystem: () =>
-      set({
-        elevators: [],
-        floorRequests: [],
-        activeRequests: [],
-        isRunning: false,
-        currentTime: 0,
-        // ASSIGNMENT: Reset assignment metrics
-        assignmentMetrics: {
-          lobbyToUpperRequests: 0,
-          upperToLobbyRequests: 0,
-          peakHourRequests: 0,
-          starvationEvents: 0,
-          thirtySecondEscalations: 0
-        }
-      }),
-  }))
-)
+    floorRequests: [], // CRITICAL: Reset floor requests
+    activeRequests: [],
+    assignmentMetrics: undefined,
+    config: defaultConfig
+  }),
+}))

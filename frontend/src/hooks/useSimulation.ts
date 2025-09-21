@@ -8,6 +8,7 @@ import type { DirectionType } from '@/types/elevator'
 export const useSimulation = () => {
   const [isLoading, setIsLoading] = useState(false)
   const [lastUpdate, setLastUpdate] = useState(0)
+  const [hasBeenStarted, setHasBeenStarted] = useState(false) // Track if simulation was ever started
 
   const {
     elevators,
@@ -28,24 +29,33 @@ export const useSimulation = () => {
     updateConfig: updateServerConfig,
   } = useWebSocket()
 
+  // FIXED: Distinguish between initial start and restart
   const handleStart = useCallback(async () => {
     if (!isConnected) return
     setIsLoading(true)
     try {
-      startSimulation(config)
+      // Only pass config on initial start, not on restart
+      if (!hasBeenStarted) {
+        startSimulation(config) // Initial start with config
+        setHasBeenStarted(true)
+      } else {
+        startSimulation() // Restart without config to preserve state
+      }
     } finally {
       setTimeout(() => setIsLoading(false), 1000)
     }
-  }, [isConnected, startSimulation, config])
+  }, [isConnected, startSimulation, config, hasBeenStarted])
 
   const handleStop = useCallback(() => {
     if (!isConnected) return
     stopSimulation()
+    // Note: Don't reset hasBeenStarted here - we want to preserve it for restart
   }, [isConnected, stopSimulation])
 
   const handleReset = useCallback(() => {
     if (!isConnected) return
     resetSimulation()
+    setHasBeenStarted(false) // Reset the flag on explicit reset
   }, [isConnected, resetSimulation])
 
   const handleConfigChange = useCallback((updates: any) => {
@@ -67,7 +77,7 @@ export const useSimulation = () => {
 
     const request = {
       id: generateId(),
-      type: 'floor_call', // FIXED: Use string instead of enum
+      type: 'floor_call',
       originFloor,
       destinationFloor,
       direction: (destinationFloor > originFloor ? 'up' : 'down'),
@@ -84,7 +94,6 @@ export const useSimulation = () => {
     addRequest(request)
   }, [isConnected, config.numFloors, addRequest])
 
-  // NEW: Complete request with origin AND destination
   const addCompleteRequest = useCallback((originFloor: number, destinationFloor: number) => {
     if (!isConnected) return
 
@@ -92,7 +101,7 @@ export const useSimulation = () => {
     
     const request = {
       id: generateId(),
-      type: 'floor_call', // FIXED: Use string instead of enum
+      type: 'floor_call',
       originFloor,
       destinationFloor,
       direction,
@@ -109,15 +118,16 @@ export const useSimulation = () => {
     addRequest(request)
   }, [isConnected, addRequest])
 
-  // Keep original addFloorCall for floor button presses
   const addFloorCall = useCallback((floor: number, direction: 'up' | 'down') => {
-    addFloorRequest(floor, direction as DirectionType)
+    console.log(`Adding floor call: Floor ${floor}, Direction: ${direction}`)
+    
+    addFloorRequest(floor, direction)
     
     const request = {
       id: generateId(),
-      type: 'floor_call', // FIXED: Use string instead of enum
+      type: 'floor_call',
       originFloor: floor,
-      destinationFloor: null, // Floor button press - no destination yet
+      destinationFloor: null,
       direction,
       timestamp: Date.now(),
       priority: RequestPriority.NORMAL,
@@ -128,7 +138,7 @@ export const useSimulation = () => {
       passengerCount: 1,
     }
 
-    console.log('Adding floor call:', request)
+    console.log('Adding floor call request:', request)
     addRequest(request)
   }, [addFloorRequest, addRequest])
 
@@ -147,6 +157,8 @@ export const useSimulation = () => {
     const activeElevators = elevators.filter(e => e.state !== 'idle').length
     const utilizationRate = totalElevators > 0 ? activeElevators / totalElevators : 0
     
+    console.log('System Status - Floor Requests:', floorRequests.length)
+    
     return {
       totalElevators,
       activeElevators,
@@ -162,6 +174,17 @@ export const useSimulation = () => {
       setLastUpdate(Date.now())
     }
   }, [elevators, isRunning])
+
+  // Reset hasBeenStarted flag when simulation is reset externally
+  useEffect(() => {
+    if (!isRunning && activeRequests.length === 0 && elevators.length === 0) {
+      setHasBeenStarted(false)
+    }
+  }, [isRunning, activeRequests.length, elevators.length])
+
+  useEffect(() => {
+    console.log('useSimulation - Floor Requests updated:', floorRequests)
+  }, [floorRequests])
 
   return {
     isRunning,
@@ -179,7 +202,7 @@ export const useSimulation = () => {
       reset: handleReset,
       updateConfig: handleConfigChange,
       addFloorCall,
-      addCompleteRequest, // ADDED: The missing function
+      addCompleteRequest,
       generateRandomRequest,
       generatePeakTraffic,
     },

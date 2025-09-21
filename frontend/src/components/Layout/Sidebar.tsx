@@ -16,11 +16,19 @@ const Sidebar: React.FC<SidebarProps> = ({ className }) => {
   const [mounted, setMounted] = useState(false)
   const { sidebarOpen, setSidebarOpen, viewMode, setViewMode } = useUIStore()
   const { systemStatus, elevators } = useSimulation()
-  const { formatted, health } = useMetrics()
+  const { formatted, health, raw } = useMetrics()
 
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  // Debug logging for wait time
+  useEffect(() => {
+    if (raw?.averageWaitTime !== undefined) {
+      console.log('Sidebar Debug - Raw wait time:', raw.averageWaitTime)
+      console.log('Sidebar Debug - Formatted wait time:', formatted.averageWaitTime)
+    }
+  }, [raw?.averageWaitTime, formatted.averageWaitTime])
 
   const navigationItems = [
     {
@@ -48,6 +56,21 @@ const Sidebar: React.FC<SidebarProps> = ({ className }) => {
       description: 'Load testing tools'
     }
   ]
+
+  // Helper function to display wait time with fallback
+  const displayWaitTime = () => {
+    if (formatted.averageWaitTime && formatted.averageWaitTime !== '0s' && formatted.averageWaitTime !== '') {
+      return formatted.averageWaitTime
+    }
+    
+    // Fallback: if we have raw data but formatting failed
+    if (raw?.averageWaitTime && raw.averageWaitTime > 0) {
+      return `${Math.round(raw.averageWaitTime)}s`
+    }
+    
+    // Default display
+    return '0s'
+  }
 
   // Don't render anything until mounted to prevent hydration mismatch
   if (!mounted) {
@@ -116,7 +139,9 @@ const Sidebar: React.FC<SidebarProps> = ({ className }) => {
                   </div>
                   <div>
                     <p className="text-muted-foreground">Avg Wait Time</p>
-                    <p className="text-lg font-semibold text-green-500">{formatted.averageWaitTime}</p>
+                    <p className="text-lg font-semibold text-green-500" title={`Raw: ${raw?.averageWaitTime || 0}s`}>
+                      {displayWaitTime()}
+                    </p>
                   </div>
                   <div>
                     <p className="text-muted-foreground">System Health</p>
@@ -167,11 +192,11 @@ const Sidebar: React.FC<SidebarProps> = ({ className }) => {
                           className="w-3 h-3 rounded-full"
                           style={{ backgroundColor: elevator.color }}
                         />
-                        <span className="text-sm font-medium">Elevator {elevator.id + 1}</span>
+                        <span className="text-sm font-medium whitespace-nowrap">Elevator {elevator.id + 1}</span>
                       </div>
-                      <div className="text-right">
-                        <p className="text-sm font-medium">Floor {elevator.currentFloor}</p>
-                        <p className="text-xs text-muted-foreground capitalize">
+                      <div className="flex flex-col text-right">
+                        <p className="text-sm font-medium whitespace-nowrap">Floor {elevator.currentFloor}</p>
+                        <p className="text-xs text-muted-foreground capitalize whitespace-nowrap">
                           {elevator.state.replace('_', ' ')}
                         </p>
                       </div>
@@ -195,6 +220,24 @@ const Sidebar: React.FC<SidebarProps> = ({ className }) => {
                         • {issue}
                       </p>
                     ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Debug Info Card (Remove in production) */}
+            {process.env.NODE_ENV === 'development' && (
+              <Card className="border-blue-500/50 bg-blue-500/5">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium text-blue-700 dark:text-blue-400">
+                    Debug Info
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-1 text-xs">
+                    <p>Raw Wait Time: {raw?.averageWaitTime || 0}s</p>
+                    <p>Formatted: {formatted.averageWaitTime || 'N/A'}</p>
+                    <p>Active Requests: {systemStatus.pendingRequests}</p>
                   </div>
                 </CardContent>
               </Card>

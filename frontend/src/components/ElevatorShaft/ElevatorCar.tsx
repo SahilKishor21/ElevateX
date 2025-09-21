@@ -3,7 +3,6 @@ import { ArrowUp, ArrowDown, Users, Wrench, AlertCircle, AlertTriangle } from 'l
 import { Elevator } from '@/types/elevator'
 import StatusBadge from '../Common/StatusBadge'
 import { cn } from '@/lib/utils'
-import { DEFAULT_CONFIG } from '@/lib/constants'
 
 interface ElevatorCarProps {
   elevator: Elevator
@@ -18,6 +17,8 @@ interface ElevatorCarProps {
 const ElevatorCar: React.FC<ElevatorCarProps> = ({
   elevator,
   totalFloors,
+  floorHeight,
+  elevatorWidth,
   isSelected = false,
   onClick,
   animate = true
@@ -45,12 +46,11 @@ const ElevatorCar: React.FC<ElevatorCarProps> = ({
   }
 
   const calculatePosition = () => {
-    const floorHeight = DEFAULT_CONFIG.FLOOR_HEIGHT
-    const position = (totalFloors - elevator.currentFloor) * floorHeight
-    return position
+    const position = (totalFloors - elevator.currentFloor) * (floorHeight || 70);
+    const carHeight = (floorHeight || 70) - 5; // Updated car height
+    return position + ((floorHeight || 70) - carHeight);
   }
 
-  // Ensure we have valid data with defaults
   const passengerCount = elevator.passengers?.length || 0
   const elevatorCapacity = elevator.capacity || 8
   const requestQueueLength = elevator.requestQueue?.length || 0
@@ -63,14 +63,15 @@ const ElevatorCar: React.FC<ElevatorCarProps> = ({
   return (
     <div
       className={cn(
-        'absolute left-2 z-10 cursor-pointer transition-all duration-300 group',
+        'absolute z-10 cursor-pointer transition-all duration-300 group',
         animate && 'animate-elevator-move',
         isSelected && 'ring-2 ring-primary ring-offset-2'
       )}
       style={{
         top: `${calculatePosition()}px`,
-        width: `${DEFAULT_CONFIG.ELEVATOR_WIDTH}px`,
-        height: `${DEFAULT_CONFIG.FLOOR_HEIGHT - 10}px`,
+        left: `0px`,
+        width: `${elevatorWidth}px`,
+        height: `${(floorHeight || 70) - 5}px`, // Updated car height
       }}
       onClick={onClick}
     >

@@ -118,7 +118,7 @@ const AlgorithmComparison: React.FC = () => {
   useEffect(() => {
     const fetchCurrentAlgorithm = async () => {
       try {
-        const response = await fetch('http://localhost:3001/api/status')
+        const response = await fetch('https://elevatex-2ght.onrender.com/api/status')
         if (response.ok) {
           const data = await response.json()
           if (data.currentAlgorithm) {
@@ -140,7 +140,7 @@ const AlgorithmComparison: React.FC = () => {
     const fetchComparisonData = async () => {
       console.log('Fetching algorithm comparison data...')
       try {
-        const response = await fetch('http://localhost:3001/api/algorithm-comparison')
+        const response = await fetch('https://elevatex-2ght.onrender.com/api/algorithm-comparison')
         console.log('API Response status:', response.status)
         
         if (!response.ok) {
@@ -228,7 +228,7 @@ const AlgorithmComparison: React.FC = () => {
     setSwitchError(null)
     
     try {
-      const response = await fetch('http://localhost:3001/api/switch-algorithm', {
+      const response = await fetch('https://elevatex-2ght.onrender.com/api/switch-algorithm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ algorithm })

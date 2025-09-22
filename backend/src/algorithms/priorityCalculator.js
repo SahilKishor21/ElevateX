@@ -24,7 +24,6 @@ class PriorityCalculator {
     return Math.max(0.1, finalPriority)
   }
 
-  // STARVATION FIX: Enhanced user experience bias with aggressive escalation
   getUserExperienceBias(request) {
     if (!request) return 0
     
@@ -32,48 +31,42 @@ class PriorityCalculator {
     const waitSeconds = request.waitTime / 1000
     const hour = new Date().getHours()
     
-    // ASSIGNMENT REQUIREMENT: "Escalate priority for requests waiting > 30 seconds"
-    // STARVATION FIX: Much more aggressive escalation to prevent starvation
     if (waitSeconds > 90) {
-      bias += 200  // CRITICAL - Must be served immediately
-      console.log(`ðŸš¨ CRITICAL STARVATION: Request ${request.id} waiting ${waitSeconds.toFixed(1)}s - Priority boost: +200`)
+      bias += 200
+      console.log(`CRITICAL STARVATION: Request ${request.id} waiting ${waitSeconds.toFixed(1)}s - Priority boost: +200`)
     } else if (waitSeconds > 60) {
-      bias += 150  // SEVERE - Assignment requirement violated
-      console.log(`ðŸš¨ SEVERE STARVATION: Request ${request.id} waiting ${waitSeconds.toFixed(1)}s - Priority boost: +150`)
+      bias += 150
+      console.log(`SEVERE STARVATION: Request ${request.id} waiting ${waitSeconds.toFixed(1)}s - Priority boost: +150`)
     } else if (waitSeconds > 45) {
-      bias += 100  // MODERATE - Preventive escalation
-      console.log(`âš ï¸ MODERATE STARVATION: Request ${request.id} waiting ${waitSeconds.toFixed(1)}s - Priority boost: +100`)
+      bias += 100
+      console.log(`MODERATE STARVATION: Request ${request.id} waiting ${waitSeconds.toFixed(1)}s - Priority boost: +100`)
     } else if (waitSeconds > 30) {
-      bias += 75   // EARLY - Assignment escalation point
-      console.log(`âš ï¸ EARLY STARVATION: Request ${request.id} waiting ${waitSeconds.toFixed(1)}s - Priority boost: +75`)
+      bias += 75
+      console.log(`EARLY STARVATION: Request ${request.id} waiting ${waitSeconds.toFixed(1)}s - Priority boost: +75`)
     }
     
-    // ASSIGNMENT REQUIREMENT: "Prioritize lobby-to-upper-floor requests during morning rush"
     if (hour >= 8 && hour <= 10) {
       if (request.originFloor === 1 && request.destinationFloor > 5) {
-        bias += 35 // High priority for lobby-to-upper during morning rush
+        bias += 35
       }
       if (request.destinationFloor > request.originFloor) {
-        bias += 15 // Additional morning rush bias for any upward movement
+        bias += 15
       }
     }
     
-    // Evening rush hour priority
     if (hour >= 17 && hour <= 19) {
       if (request.originFloor > 5 && request.destinationFloor === 1) {
-        bias += 30 // High priority for upper-to-lobby during evening rush
+        bias += 30
       }
       if (request.destinationFloor < request.originFloor) {
-        bias += 12 // Additional evening rush bias for any downward movement
+        bias += 12
       }
     }
     
-    // VIP/Emergency priority handling
     if (request.priority >= 4) {
-      bias += request.priority * 15 // VIP requests get significant boost
+      bias += request.priority * 15
     }
     
-    // Accessibility/special needs priority
     if (request.type === 'accessibility' || request.passengerCount > 4) {
       bias += 25
     }
@@ -81,54 +74,48 @@ class PriorityCalculator {
     return bias
   }
 
-  // STARVATION FIX: Much more aggressive wait time escalation
   getWaitTimePriority(request) {
     if (!request || typeof request.waitTime !== 'number') return 1
     
     const waitSeconds = request.waitTime / 1000
     
-    // STARVATION FIX: Exponential escalation starts earlier and grows much faster
     if (waitSeconds > 90) {
-      return Math.pow(5.0, (waitSeconds - 90) / 15) // Extreme escalation after 90 seconds
+      return Math.pow(5.0, (waitSeconds - 90) / 15)
     } else if (waitSeconds > 60) {
-      return Math.pow(3.0, (waitSeconds - 60) / 10) // Very aggressive after 60 seconds  
+      return Math.pow(3.0, (waitSeconds - 60) / 10)
     } else if (waitSeconds > 30) {
-      return Math.pow(2.0, (waitSeconds - 30) / 10) // Double every 10 seconds after 30s
+      return Math.pow(2.0, (waitSeconds - 30) / 10)
     } else if (waitSeconds > 15) {
-      return 1 + ((waitSeconds - 15) / 15) // Linear increase 15-30s
+      return 1 + ((waitSeconds - 15) / 15)
     }
     
     return 1
   }
 
-  // STARVATION FIX: More aggressive urgency multiplier
   getUrgencyMultiplier(request) {
     if (!request) return 1
     
     const waitSeconds = request.waitTime / 1000
     
-    // STARVATION FIX: Much more aggressive multipliers
-    if (waitSeconds > 120) return 8.0  // Extreme urgency - 2 minutes
-    if (waitSeconds > 90) return 6.0   // Critical urgency - 1.5 minutes  
-    if (waitSeconds > 60) return 4.0   // Very urgent - 1 minute
-    if (waitSeconds > 45) return 3.0   // Urgent - 45 seconds
-    if (waitSeconds > 30) return 2.5   // Elevated - 30 seconds (assignment threshold)
+    if (waitSeconds > 120) return 8.0
+    if (waitSeconds > 90) return 6.0
+    if (waitSeconds > 60) return 4.0
+    if (waitSeconds > 45) return 3.0
+    if (waitSeconds > 30) return 2.5
     
     return 1
   }
 
-  // STARVATION FIX: Extremely aggressive starvation detection and prevention
   getStarvationBonus(request) {
     if (!request || typeof request.waitTime !== 'number') return 0
     
     const waitSeconds = request.waitTime / 1000
     
-    // STARVATION FIX: Much higher bonuses to ensure immediate assignment
-    if (waitSeconds > 120) return 500  // Absolutely critical - 2 minutes
-    if (waitSeconds > 90) return 300   // Extreme starvation - 1.5 minutes
-    if (waitSeconds > 60) return 200   // Critical starvation - 1 minute
-    if (waitSeconds > 45) return 100   // Severe starvation - 45 seconds
-    if (waitSeconds > 30) return 50    // Early warning - 30 seconds (assignment requirement)
+    if (waitSeconds > 120) return 500
+    if (waitSeconds > 90) return 300
+    if (waitSeconds > 60) return 200
+    if (waitSeconds > 45) return 100
+    if (waitSeconds > 30) return 50
     
     return 0
   }
@@ -146,11 +133,10 @@ class PriorityCalculator {
     
     let bonus = 0
     
-    // Morning rush (8-10 AM): Heavy lobby to upper floor traffic
     if (hour >= 8 && hour <= 10) {
       if (request.originFloor === 1 && request.destinationFloor > 5) {
         if (hour === 9) {
-          bonus = 40 // Peak bonus at 9 AM for assignment compliance
+          bonus = 40
         } else {
           bonus = 25
         }
@@ -159,11 +145,10 @@ class PriorityCalculator {
       }
     }
     
-    // Evening rush (5-7 PM): Heavy upper to lobby traffic
     if (hour >= 17 && hour <= 19) {
       if (request.originFloor > 5 && request.destinationFloor === 1) {
         if (hour === 18) {
-          bonus = 35 // Peak evening exodus
+          bonus = 35
         } else {
           bonus = 20
         }
@@ -172,7 +157,6 @@ class PriorityCalculator {
       }
     }
     
-    // Lunch time (12-2 PM): Mid-floor traffic
     if (hour >= 12 && hour <= 14) {
       const midFloor = Math.floor(15 / 2)
       if (Math.abs(request.originFloor - midFloor) <= 3 || 
@@ -195,29 +179,23 @@ class PriorityCalculator {
     const hour = new Date().getHours()
     const minute = new Date().getMinutes()
     
-    // Morning rush peak (8:30-9:30 AM)
     if (hour === 8 && minute >= 30) return 12
-    if (hour === 9 && minute <= 30) return 15 // Peak time
+    if (hour === 9 && minute <= 30) return 15
     if (hour === 9 && minute > 30) return 10
     if (hour === 10 && minute <= 30) return 8
     
-    // Evening rush peak (5:30-6:30 PM)  
     if (hour === 17 && minute >= 30) return 10
-    if (hour === 18 && minute <= 30) return 12 // Peak time
+    if (hour === 18 && minute <= 30) return 12
     if (hour === 18 && minute > 30) return 8
     
-    // Lunch rush (12:00-1:00 PM)
     if (hour === 12) return 8
     if (hour === 13 && minute <= 30) return 6
     
-    // General peak hours
     const peakHours = [8, 9, 12, 13, 17, 18]
     if (peakHours.includes(hour)) return 5
     
-    // Shoulder hours
     if ([7, 10, 11, 14, 15, 16, 19].includes(hour)) return 3
     
-    // Off-peak penalty
     if (hour < 6 || hour > 22) return -2
     
     return 0
@@ -240,28 +218,24 @@ class PriorityCalculator {
     
     let penalty = 0
     
-    // Penalty for overcrowded elevators (user comfort)
     const loadFactor = elevator.getLoad()
     if (loadFactor > 0.8) {
-      penalty += 25 // Avoid cramming passengers
+      penalty += 25
     }
     
-    // Penalty for elevators with many stops (longer travel time)
     const stops = elevator.requestQueue?.length || 0
     penalty += stops * 3
     
-    // STARVATION FIX: Reduce penalty for starving requests
     const waitSeconds = request.waitTime / 1000
     if (waitSeconds > 60) {
-      penalty = Math.max(0, penalty - 20) // Emergency override for starving requests
+      penalty = Math.max(0, penalty - 20)
     }
     
-    // Penalty for elevators moving away from request
     if (elevator.direction === 'up' && request.originFloor < elevator.currentFloor) {
-      penalty += waitSeconds > 60 ? 5 : 15 // Reduced penalty for starving requests
+      penalty += waitSeconds > 60 ? 5 : 15
     }
     if (elevator.direction === 'down' && request.originFloor > elevator.currentFloor) {
-      penalty += waitSeconds > 60 ? 5 : 15 // Reduced penalty for starving requests
+      penalty += waitSeconds > 60 ? 5 : 15
     }
     
     return penalty
@@ -285,34 +259,32 @@ class PriorityCalculator {
     const requestDirection = request.destinationFloor > request.originFloor ? 'up' : 'down'
     const elevatorDirection = elevator.direction
     
-    // STARVATION FIX: Reduce direction penalties for starving requests
     const waitSeconds = request.waitTime / 1000
-    const starvationMultiplier = waitSeconds > 60 ? 0.3 : 1.0 // Reduce penalties for starving requests
+    const starvationMultiplier = waitSeconds > 60 ? 0.3 : 1.0
     
     if (elevatorDirection === requestDirection) {
       if (requestDirection === 'up' && elevator.currentFloor <= request.originFloor) {
-        return -15 // Excellent alignment
+        return -15
       }
       if (requestDirection === 'down' && elevator.currentFloor >= request.originFloor) {
-        return -15 // Excellent alignment
+        return -15
       }
       return 8 * starvationMultiplier
     }
     
-    return 25 * starvationMultiplier // Reduced penalty for starving requests
+    return 25 * starvationMultiplier
   }
 
   getDistancePenalty(elevator, request) {
     if (!elevator) return 0
     const distance = Math.abs(elevator.currentFloor - request.originFloor)
     
-    // STARVATION FIX: Reduce distance penalties for starving requests
     const waitSeconds = request.waitTime / 1000
     let distanceMultiplier = 1.0
     
-    if (waitSeconds > 90) distanceMultiplier = 0.2  // Almost ignore distance for critical cases
-    else if (waitSeconds > 60) distanceMultiplier = 0.4  // Greatly reduce distance penalty
-    else if (waitSeconds > 30) distanceMultiplier = 0.7  // Moderately reduce distance penalty
+    if (waitSeconds > 90) distanceMultiplier = 0.2
+    else if (waitSeconds > 60) distanceMultiplier = 0.4
+    else if (waitSeconds > 30) distanceMultiplier = 0.7
     
     if (distance === 0) return 0
     if (distance <= 2) return distance * 2 * distanceMultiplier
@@ -416,7 +388,6 @@ class PriorityCalculator {
     const avgLoad = recent.reduce((sum, load) => sum + load.utilization, 0) / recent.length
     const avgRequests = recent.reduce((sum, load) => sum + load.activeRequests, 0) / recent.length
     
-    // More aggressive priority escalation during high load
     if (avgLoad > 0.8 || avgRequests > 25) return 2.5
     if (avgLoad > 0.6 || avgRequests > 15) return 2.0
     if (avgLoad > 0.4 || avgRequests > 10) return 1.5
@@ -442,12 +413,10 @@ class PriorityCalculator {
       trackedElevators: this.elevatorPerformanceHistory.size,
       systemLoadHistory: this.systemLoadHistory.length,
       currentSystemLoad: this.getSystemLoadMultiplier(),
-      // Assignment metrics
-      averageWaitTimeThreshold: 30, // seconds
-      starvationThreshold: 60, // seconds  
+      averageWaitTimeThreshold: 30,
+      starvationThreshold: 60,
       peakHours: [8, 9, 17, 18],
       userExperienceBiasActive: true,
-      // STARVATION FIX: Starvation prevention metrics
       starvationPrevention: {
         earlyWarningThreshold: 30,
         moderateThreshold: 45, 

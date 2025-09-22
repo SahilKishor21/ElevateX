@@ -49,9 +49,9 @@ class OptimizedElevator {
   update(deltaTime) {
   const now = Date.now()
   
-  // CRITICAL: Much faster movement and loading
-  const moveInterval = Math.max(500, 1000 / (this.speed || 1)) // Minimum 500ms, faster with speed
-  const loadingInterval = Math.max(1000, 2000 / (this.speed || 1)) // Minimum 1s loading
+ 
+  const moveInterval = Math.max(500, 1000 / (this.speed || 1)) 
+  const loadingInterval = Math.max(1000, 2000 / (this.speed || 1)) 
   
   if (this.maintenanceMode) {
     this.state = 'maintenance'
@@ -73,8 +73,6 @@ class OptimizedElevator {
           this.doorOpen = true
           this.loadingStartTime = now
           this.totalTrips = (this.totalTrips || 0) + 1
-          
-          // Remove this floor from queue immediately
           this.requestQueue = this.requestQueue.filter(f => f !== this.currentFloor)
           console.log(`E${this.id}: Arrived at floor ${this.currentFloor}, queue: [${this.requestQueue.join(', ')}]`)
         }
@@ -89,8 +87,6 @@ class OptimizedElevator {
         this.targetFloor = null
         
         console.log(`E${this.id}: Finished loading at floor ${this.currentFloor}`)
-        
-        // Immediately start next movement if queue has items
         if (this.requestQueue.length > 0) {
           this.processNextDestination()
         } else {
@@ -100,7 +96,6 @@ class OptimizedElevator {
       break
       
     case 'idle':
-      // Process queue immediately
       this.processNextDestination()
       break
   }
@@ -108,15 +103,12 @@ class OptimizedElevator {
 
   updateMovement(now, moveInterval) {
     if (now - this.lastMoveTime >= moveInterval) {
-      // Move one floor
       const previousFloor = this.currentFloor;
       this.currentFloor += this.direction === 'up' ? 1 : -1;
       this.totalDistance += 1;
       this.lastMoveTime = now;
       
       console.log(`E${this.id}: Moved from ${previousFloor} to ${this.currentFloor}`);
-      
-      // Check if we've reached target or should stop at this floor
       if (this.shouldStopAtCurrentFloor()) {
         this.arriveAtFloor();
       }
@@ -124,7 +116,6 @@ class OptimizedElevator {
   }
 
   shouldStopAtCurrentFloor() {
-    // Stop if we've reached the target floor OR if there are requests for this floor
     return this.currentFloor === this.targetFloor || 
            this.requestQueue.includes(this.currentFloor);
   }
@@ -137,7 +128,6 @@ class OptimizedElevator {
     this.isMoving = false;
     this.totalTrips += 1;
     
-    // Remove this floor from queue
     this.requestQueue = this.requestQueue.filter(floor => floor !== this.currentFloor);
   }
 
@@ -156,8 +146,7 @@ class OptimizedElevator {
     this.doorOpen = false;
     this.doorTimer = null;
     this.targetFloor = null;
-    
-    // Only set direction to idle if no more destinations
+  
     if (this.requestQueue.length === 0) {
       this.direction = 'idle';
     }
@@ -177,7 +166,6 @@ processNextDestination() {
     console.log(`E${this.id}: Moving to next destination: ${nextFloor}`)
     this.moveTo(nextFloor)
   } else if (nextFloor === this.currentFloor) {
-    // Already at destination, remove from queue
     this.requestQueue.shift()
     this.processNextDestination()
   }
@@ -186,39 +174,31 @@ processNextDestination() {
   getNextOptimalFloor() {
     if (this.requestQueue.length === 0) return null;
     
-    // Sort queue based on current direction for efficiency
     const currentFloor = this.currentFloor;
     
     if (this.direction === 'up' || this.direction === 'idle') {
-      // Find next floor up, or closest if none above
       const floorsAbove = this.requestQueue.filter(f => f > currentFloor).sort((a, b) => a - b);
       if (floorsAbove.length > 0) {
         this.direction = 'up';
         return floorsAbove[0];
       }
-      
-      // No floors above, go to highest floor below
       const floorsBelow = this.requestQueue.filter(f => f < currentFloor).sort((a, b) => b - a);
       if (floorsBelow.length > 0) {
         this.direction = 'down';
         return floorsBelow[0];
       }
     } else if (this.direction === 'down') {
-      // Find next floor down, or closest if none below
       const floorsBelow = this.requestQueue.filter(f => f < currentFloor).sort((a, b) => b - a);
       if (floorsBelow.length > 0) {
         return floorsBelow[0];
       }
-      
-      // No floors below, go to lowest floor above
       const floorsAbove = this.requestQueue.filter(f => f > currentFloor).sort((a, b) => a - b);
       if (floorsAbove.length > 0) {
         this.direction = 'up';
         return floorsAbove[0];
       }
     }
-    
-    // Fallback: closest floor
+
     return this.requestQueue.sort((a, b) => 
       Math.abs(a - currentFloor) - Math.abs(b - currentFloor)
     )[0];
@@ -237,8 +217,6 @@ processNextDestination() {
   if (!this.requestQueue.includes(floor)) {
     this.requestQueue.push(floor)
     console.log(`E${this.id}: Added floor ${floor}. Queue: [${this.requestQueue.join(', ')}]`)
-    
-    // If idle, start moving immediately
     if (this.state === 'idle') {
       this.processNextDestination()
     }
@@ -283,7 +261,6 @@ processNextDestination() {
   }
 
   getUtilization() {
-    // Cache utilization calculation for performance
     const now = Date.now();
     if (now - this.utilizationCache.lastCalculated < 1000) {
       return this.utilizationCache.value;
@@ -326,7 +303,6 @@ processNextDestination() {
     }
   }
 
-  // Optimized status method with minimal object creation
   getStatus() {
     return {
       id: this.id,
@@ -334,10 +310,10 @@ processNextDestination() {
       targetFloor: this.targetFloor,
       state: this.state,
       direction: this.direction,
-      passengers: [...this.passengers], // Shallow copy
+      passengers: [...this.passengers], 
       capacity: this.capacity,
       doorOpen: this.doorOpen,
-      requestQueue: [...this.requestQueue], // Shallow copy
+      requestQueue: [...this.requestQueue], 
       totalDistance: this.totalDistance,
       totalTrips: this.totalTrips,
       maintenanceMode: this.maintenanceMode,
@@ -351,7 +327,6 @@ processNextDestination() {
     };
   }
 
-  // Performance: Batch queue operations
   addMultipleRequests(floors) {
     const added = [];
     floors.forEach(floor => {
@@ -361,8 +336,6 @@ processNextDestination() {
     });
     return added;
   }
-
-  // Performance: Clear completed requests efficiently
   clearCompletedRequests() {
     const beforeLength = this.requestQueue.length;
     this.requestQueue = this.requestQueue.filter(floor => floor !== this.currentFloor);

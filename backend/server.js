@@ -23,8 +23,11 @@ const io = socketIo(server, {
 const PORT = process.env.PORT || 3001
 const DEBUG = process.env.NODE_ENV === 'development'
 
-// ADDED: Track simulation initialization state to prevent reset on restart
 let isSimulationInitialized = false
+let lastSuccessfulUpdate = Date.now()
+let consecutiveErrors = 0
+const MAX_CONSECUTIVE_ERRORS = 5
+const UPDATE_TIMEOUT = 5000
 
 app.use(helmet())
 app.use(compression())
@@ -35,35 +38,129 @@ app.use(morgan('combined'))
 const simulationEngine = new SimulationEngine()
 const elevatorController = new ElevatorController(simulationEngine)
 
-app.get('/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() })
-})
-
-app.get('/api/status', (req, res) => {
-  const performanceMetrics = simulationEngine.getPerformanceMetrics()
-  
-  if (DEBUG) {
-    console.log('API Status - Performance Metrics:', {
-      averageWaitTime: performanceMetrics.averageWaitTime,
-      starvationCount: performanceMetrics.starvationCount
+function withTimeout(promise, timeoutMs = UPDATE_TIMEOUT, operation = 'operation') {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(`${operation} timed out after ${timeoutMs}ms`))
+      }, timeoutMs)
     })
-  }
+  ])
+}
 
-  res.json({
-    isRunning: simulationEngine.isRunning,
-    elevators: simulationEngine.elevators.map(e => e.getStatus()),
-    metrics: performanceMetrics,
-    config: simulationEngine.config,
-    currentAlgorithm: simulationEngine.getCurrentAlgorithm ? simulationEngine.getCurrentAlgorithm() : simulationEngine.config.algorithm,
-    isInitialized: isSimulationInitialized // ADDED: Include initialization status
+async function safeExecute(fn, fallback = null, operation = 'simulation operation') {
+  try {
+    return await withTimeout(
+      Promise.resolve(fn()), 
+      UPDATE_TIMEOUT, 
+      operation
+    )
+  } catch (error) {
+    console.error(`Safe execution failed for ${operation}:`, error)
+    consecutiveErrors++
+    
+    if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+      console.error(`Too many consecutive errors (${consecutiveErrors}). Attempting recovery...`)
+      attemptRecovery()
+    }
+    
+    return fallback
+  }
+}
+
+function attemptRecovery() {
+  try {
+    console.log('Attempting simulation recovery...')
+    
+    if (simulationEngine.activeRequests && Array.isArray(simulationEngine.activeRequests)) {
+      const hangingRequests = simulationEngine.activeRequests.filter(req => {
+        const waitTime = Date.now() - (req.timestamp || 0)
+        return waitTime > 300000
+      })
+      
+      if (hangingRequests.length > 0) {
+        console.log(`Found ${hangingRequests.length} potentially hanging requests, cleaning up...`)
+        hangingRequests.forEach(req => {
+          try {
+            req.isServed = true
+            req.finalWaitTime = Date.now() - req.timestamp
+            if (simulationEngine.completeRequest && typeof simulationEngine.completeRequest === 'function') {
+              simulationEngine.completeRequest(req.id)
+            }
+          } catch (cleanupError) {
+            console.error('Error cleaning up hanging request:', cleanupError)
+          }
+        })
+      }
+    }
+    
+    consecutiveErrors = 0
+    
+    io.emit('simulation_recovery', {
+      timestamp: Date.now(),
+      message: 'Simulation recovered from hanging state'
+    })
+    
+    console.log('Recovery attempt completed')
+  } catch (recoveryError) {
+    console.error('Recovery attempt failed:', recoveryError)
+  }
+}
+
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    lastUpdate: lastSuccessfulUpdate,
+    consecutiveErrors,
+    isHealthy: consecutiveErrors < MAX_CONSECUTIVE_ERRORS
   })
 })
 
-// Get algorithm comparison
+app.get('/api/status', (req, res) => {
+  safeExecute(
+    () => simulationEngine.getPerformanceMetrics(),
+    { averageWaitTime: 0, starvationCount: 0 },
+    'get performance metrics'
+  ).then(performanceMetrics => {
+    if (DEBUG) {
+      console.log('API Status - Performance Metrics:', {
+        averageWaitTime: performanceMetrics.averageWaitTime,
+        starvationCount: performanceMetrics.starvationCount
+      })
+    }
+
+    res.json({
+      isRunning: simulationEngine.isRunning,
+      elevators: simulationEngine.elevators?.map(e => {
+        try {
+          return e.getStatus()
+        } catch (err) {
+          console.warn('Error getting elevator status:', err)
+          return { id: e.id || 'unknown', floor: 1, state: 'idle' }
+        }
+      }) || [],
+      metrics: performanceMetrics,
+      config: simulationEngine.config,
+      currentAlgorithm: simulationEngine.getCurrentAlgorithm ? simulationEngine.getCurrentAlgorithm() : simulationEngine.config.algorithm,
+      isInitialized: isSimulationInitialized,
+      health: {
+        lastUpdate: lastSuccessfulUpdate,
+        consecutiveErrors,
+        isHealthy: consecutiveErrors < MAX_CONSECUTIVE_ERRORS
+      }
+    })
+  }).catch(error => {
+    console.error('API Status error:', error)
+    res.status(500).json({ error: 'Failed to get simulation status' })
+  })
+})
+
 app.get('/api/algorithm-comparison', (req, res) => {
   try {
     const allRequests = simulationEngine.getAllRequests ? simulationEngine.getAllRequests() : 
-                        [...simulationEngine.floorRequests, ...simulationEngine.activeRequests]
+                        [...(simulationEngine.floorRequests || []), ...(simulationEngine.activeRequests || [])]
     const currentAlg = simulationEngine.getCurrentAlgorithm ? simulationEngine.getCurrentAlgorithm() : 
                        simulationEngine.config.algorithm || algorithmController.getCurrentAlgorithmName()
     const result = algorithmController.compareAlgorithms(simulationEngine.elevators, allRequests, currentAlg)
@@ -74,7 +171,6 @@ app.get('/api/algorithm-comparison', (req, res) => {
   }
 })
 
-// Switch algorithm
 app.post('/api/switch-algorithm', (req, res) => {
   try {
     const { algorithm } = req.body
@@ -94,68 +190,135 @@ app.post('/api/switch-algorithm', (req, res) => {
   }
 })
 
-// CRITICAL: Enhanced helper function to safely get request status
 function safeGetRequestStatus(r) {
   if (!r) return null
   
-  if (typeof r.getStatus === 'function') {
-    return r.getStatus()
-  } else {
-    // Handle plain objects from frontend
-    return {
-      id: r.id || `unknown_${Date.now()}`,
-      type: r.type || 'floor_call',
-      originFloor: typeof r.originFloor === 'number' ? r.originFloor : 1,
-      destinationFloor: typeof r.destinationFloor === 'number' ? r.destinationFloor : null,
-      direction: r.direction || 'up',
-      timestamp: r.timestamp || Date.now(),
-      priority: r.priority || 2,
-      waitTime: typeof r.waitTime === 'number' ? r.waitTime : (Date.now() - (r.timestamp || Date.now())),
-      assignedElevator: r.assignedElevator,
-      isActive: r.isActive !== undefined ? r.isActive : true,
-      isServed: r.isServed !== undefined ? r.isServed : false,
-      passengerCount: r.passengerCount || 1,
-      // CRITICAL: Include finalWaitTime for metrics calculation
-      finalWaitTime: r.finalWaitTime
+  try {
+    if (typeof r.getStatus === 'function') {
+      return r.getStatus()
+    } else {
+      const status = {
+        id: r.id || `fallback_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        type: r.type || 'floor_call',
+        originFloor: typeof r.originFloor === 'number' && r.originFloor >= 1 ? r.originFloor : 1,
+        destinationFloor: typeof r.destinationFloor === 'number' && r.destinationFloor >= 1 ? r.destinationFloor : null,
+        direction: ['up', 'down'].includes(r.direction) ? r.direction : 'up',
+        timestamp: typeof r.timestamp === 'number' && r.timestamp > 0 ? r.timestamp : Date.now(),
+        priority: typeof r.priority === 'number' ? r.priority : 2,
+        waitTime: typeof r.waitTime === 'number' ? r.waitTime : Math.max(0, Date.now() - (r.timestamp || Date.now())),
+        assignedElevator: r.assignedElevator,
+        isActive: r.isActive !== undefined ? Boolean(r.isActive) : true,
+        isServed: r.isServed !== undefined ? Boolean(r.isServed) : false,
+        passengerCount: typeof r.passengerCount === 'number' && r.passengerCount > 0 ? r.passengerCount : 1,
+        finalWaitTime: r.finalWaitTime
+      }
+      
+      if (status.isServed && !status.finalWaitTime) {
+        status.finalWaitTime = status.waitTime
+      }
+      
+      return status
     }
+  } catch (error) {
+    console.error('Error getting request status:', error, r)
+    return null
   }
 }
 
-// CRITICAL: FIXED helper to get complete system state
-function getCompleteSystemState() {
+async function getCompleteSystemState() {
   try {
-    const elevators = simulationEngine.elevators.map(e => e.getStatus())
+    const elevators = await safeExecute(
+      () => simulationEngine.elevators?.map(e => {
+        try {
+          return e.getStatus()
+        } catch (err) {
+          console.warn('Error getting elevator status:', err)
+          return { 
+            id: e.id || 'unknown', 
+            floor: e.currentFloor || 1, 
+            state: 'idle', 
+            direction: 'idle',
+            passengers: 0,
+            targetFloor: null
+          }
+        }
+      }) || [],
+      [],
+      'get elevators status'
+    )
     
-    // CRITICAL FIX: Don't process floor requests through safeGetRequestStatus
-    // Floor requests are simple objects: { floor, direction, timestamp, active }
-    // FloorIndicator expects: requests.filter(req => req.floor === floor)
-    const floorRequests = (simulationEngine.floorRequests || []).filter(r => r && r.active)
+    const floorRequests = await safeExecute(
+      () => {
+        const requests = simulationEngine.floorRequests || []
+        return requests.filter(r => {
+          return r && 
+                 typeof r.floor === 'number' && 
+                 r.floor >= 1 && 
+                 ['up', 'down'].includes(r.direction) &&
+                 r.active === true
+        })
+      },
+      [],
+      'get floor requests'
+    )
     
-    // Active requests DO need processing through safeGetRequestStatus
-    const activeRequests = simulationEngine.activeRequests.map(r => safeGetRequestStatus(r)).filter(Boolean)
+    const activeRequests = await safeExecute(
+      () => {
+        const requests = simulationEngine.activeRequests || []
+        return requests.map(r => safeGetRequestStatus(r)).filter(Boolean)
+      },
+      [],
+      'get active requests'
+    )
     
-    // Get all metrics
-    const performanceMetrics = simulationEngine.getPerformanceMetrics()
-    const realTimeMetrics = simulationEngine.getRealTimeMetrics()
-    const assignmentCompliance = simulationEngine.getAssignmentCompliance ? simulationEngine.getAssignmentCompliance() : null
+    const performanceMetrics = await safeExecute(
+      () => simulationEngine.getPerformanceMetrics(),
+      {
+        averageWaitTime: 0,
+        maxWaitTime: 0,
+        starvationCount: 0,
+        throughput: 0,
+        userSatisfactionScore: 100,
+        energyEfficiency: 85,
+        systemReliability: 100
+      },
+      'get performance metrics'
+    )
+    
+    const realTimeMetrics = await safeExecute(
+      () => simulationEngine.getRealTimeMetrics(),
+      {
+        currentTime: simulationEngine.currentTime || 0,
+        activeRequests: activeRequests.length,
+        systemLoad: 0,
+        alertsCount: 0
+      },
+      'get real-time metrics'
+    )
+    
+    const assignmentCompliance = await safeExecute(
+      () => simulationEngine.getAssignmentCompliance ? simulationEngine.getAssignmentCompliance() : null,
+      null,
+      'get assignment compliance'
+    )
     
     if (DEBUG && (performanceMetrics.averageWaitTime > 0 || floorRequests.length > 0)) {
       console.log('Server State - Complete Check:', {
         floorRequestsCount: floorRequests.length,
-        floorRequestsSample: floorRequests.slice(0, 3),
+        activeRequestsCount: activeRequests.length,
         averageWaitTime: performanceMetrics.averageWaitTime,
-        activeRequests: activeRequests.length,
         servedRequests: simulationEngine.servedRequestsHistory?.length || 0,
-        isInitialized: isSimulationInitialized
+        isInitialized: isSimulationInitialized,
+        consecutiveErrors
       })
     }
 
-    return {
+    const state = {
       elevators,
-      floorRequests, // FIXED: Simple floor request objects - no processing needed
+      floorRequests,
       activeRequests,
       isRunning: simulationEngine.isRunning,
-      currentTime: simulationEngine.currentTime,
+      currentTime: simulationEngine.currentTime || 0,
       config: simulationEngine.config,
       currentAlgorithm: simulationEngine.getCurrentAlgorithm ? simulationEngine.getCurrentAlgorithm() : simulationEngine.config.algorithm,
       assignmentMetrics: simulationEngine.assignmentMetrics || {
@@ -168,19 +331,32 @@ function getCompleteSystemState() {
       assignmentCompliance: assignmentCompliance,
       performanceMetrics,
       realTimeMetrics,
-      isInitialized: isSimulationInitialized // ADDED: Include initialization status
+      isInitialized: isSimulationInitialized
     }
+    
+    consecutiveErrors = Math.max(0, consecutiveErrors - 1)
+    lastSuccessfulUpdate = Date.now()
+    
+    return state
+    
   } catch (error) {
-    console.error('Error getting complete system state:', error)
+    console.error('Critical error getting complete system state:', error)
+    consecutiveErrors++
+    
     return {
       elevators: [],
       floorRequests: [],
       activeRequests: [],
       isRunning: false,
       currentTime: 0,
-      config: simulationEngine.config,
+      config: simulationEngine.config || {},
       error: error.message,
-      isInitialized: isSimulationInitialized
+      isInitialized: isSimulationInitialized,
+      health: {
+        consecutiveErrors,
+        lastError: error.message,
+        timestamp: Date.now()
+      }
     }
   }
 }
@@ -190,12 +366,9 @@ io.on('connection', (socket) => {
     console.log('Client connected:', socket.id)
   }
 
-  // CRITICAL: Send initial state with all metrics
-  try {
-    const initialState = getCompleteSystemState()
+  getCompleteSystemState().then(initialState => {
     socket.emit('simulation_update', initialState)
     
-    // Also send initial metrics
     socket.emit('metrics_update', {
       performance: initialState.performanceMetrics,
       realTime: initialState.realTimeMetrics,
@@ -204,19 +377,17 @@ io.on('connection', (socket) => {
       assignmentCompliance: initialState.assignmentCompliance,
       timestamp: Date.now()
     })
-  } catch (error) {
+  }).catch(error => {
     console.error('Error sending initial state:', error)
     socket.emit('error', { message: 'Failed to get initial state' })
-  }
+  })
 
-  // FIXED: Modified start_simulation handler to prevent reset on restart
   socket.on('start_simulation', (config) => {
     try {
       if (DEBUG) {
         console.log('Starting simulation with config:', config, 'isInitialized:', isSimulationInitialized)
       }
       
-      // CRITICAL FIX: Only update config on initial start, not on restart
       if (config) {
         if (!isSimulationInitialized) {
           console.log('Initial start - updating configuration')
@@ -224,27 +395,30 @@ io.on('connection', (socket) => {
           isSimulationInitialized = true
         } else {
           console.log('Restart detected - preserving existing configuration and state')
-          // For restart, we don't update config to preserve simulation state
-          // Only log that we're restarting with existing state
         }
       } else if (!isSimulationInitialized) {
-        // If no config provided and not initialized, this might be an error case
         console.warn('No config provided for uninitialized simulation')
       }
       
       const success = simulationEngine.start()
+      
+      consecutiveErrors = 0
 
       if (success) {
-        const state = getCompleteSystemState()
-        io.emit('simulation_update', state)
-        
-        if (DEBUG) {
-          console.log('Simulation started successfully. State preserved:', {
-            activeRequests: state.activeRequests.length,
-            floorRequests: state.floorRequests.length,
-            elevators: state.elevators.length
-          })
-        }
+        getCompleteSystemState().then(state => {
+          io.emit('simulation_update', state)
+          
+          if (DEBUG) {
+            console.log('Simulation started successfully. State preserved:', {
+              activeRequests: state.activeRequests.length,
+              floorRequests: state.floorRequests.length,
+              elevators: state.elevators.length
+            })
+          }
+        }).catch(error => {
+          console.error('Error getting state after start:', error)
+          socket.emit('error', { message: 'Simulation started but failed to get state' })
+        })
       }
     } catch (error) {
       console.error('Start simulation error:', error)
@@ -258,29 +432,38 @@ io.on('connection', (socket) => {
         console.log('Stopping simulation (preserving state for restart)')
       }
       simulationEngine.stop()
-      // NOTE: Don't reset isSimulationInitialized flag here - we want to preserve state for restart
-      const state = getCompleteSystemState()
-      io.emit('simulation_update', state)
+      
+      getCompleteSystemState().then(state => {
+        io.emit('simulation_update', state)
+      }).catch(error => {
+        console.error('Error getting state after stop:', error)
+        socket.emit('error', { message: 'Simulation stopped but failed to get state' })
+      })
     } catch (error) {
       console.error('Stop simulation error:', error)
       socket.emit('error', { message: error.message })
     }
   })
 
-  // FIXED: Modified reset_simulation handler to reset initialization flag
   socket.on('reset_simulation', () => {
     try {
       if (DEBUG) {
         console.log('Resetting simulation (clearing all state)')
       }
       simulationEngine.reset()
-      isSimulationInitialized = false // CRITICAL: Reset the initialization flag
-      const state = getCompleteSystemState()
-      io.emit('simulation_update', state)
+      isSimulationInitialized = false
+      consecutiveErrors = 0
       
-      if (DEBUG) {
-        console.log('Simulation reset complete. Initialization flag cleared.')
-      }
+      getCompleteSystemState().then(state => {
+        io.emit('simulation_update', state)
+        
+        if (DEBUG) {
+          console.log('Simulation reset complete. Initialization flag cleared.')
+        }
+      }).catch(error => {
+        console.error('Error getting state after reset:', error)
+        socket.emit('error', { message: 'Simulation reset but failed to get state' })
+      })
     } catch (error) {
       console.error('Reset simulation error:', error)
       socket.emit('error', { message: error.message })
@@ -293,13 +476,20 @@ io.on('connection', (socket) => {
         console.log('Config change received:', config)
       }
       simulationEngine.updateConfig(config)
-      // Note: Don't change initialization flag on config updates
-      const state = getCompleteSystemState()
-      io.emit('simulation_update', state)
-      socket.emit('config_updated', {
-        success: true,
-        config: simulationEngine.config,
-        message: 'Configuration updated successfully'
+      
+      getCompleteSystemState().then(state => {
+        io.emit('simulation_update', state)
+        socket.emit('config_updated', {
+          success: true,
+          config: simulationEngine.config,
+          message: 'Configuration updated successfully'
+        })
+      }).catch(error => {
+        console.error('Error getting state after config update:', error)
+        socket.emit('config_updated', {
+          success: false,
+          error: 'Config updated but failed to get state'
+        })
       })
     } catch (error) {
       console.error('Config update failed:', error)
@@ -316,9 +506,14 @@ io.on('connection', (socket) => {
         console.log('Adding request:', `${request.originFloor}→${request.destinationFloor || 'Floor Call'}`)
       }
       const requestId = simulationEngine.addRequest(request)
-      const state = getCompleteSystemState()
-      io.emit('simulation_update', state)
-      socket.emit('request_added', { success: true, requestId })
+      
+      getCompleteSystemState().then(state => {
+        io.emit('simulation_update', state)
+        socket.emit('request_added', { success: true, requestId })
+      }).catch(error => {
+        console.error('Error getting state after adding request:', error)
+        socket.emit('request_added', { success: false, error: 'Request added but failed to get state' })
+      })
     } catch (error) {
       console.error('Add request failed:', error)
       socket.emit('request_added', { success: false, error: error.message })
@@ -331,24 +526,48 @@ io.on('connection', (socket) => {
         console.log('Emergency stop triggered')
       }
       simulationEngine.emergencyStop()
-      // Emergency stop should preserve initialization state for quick restart
-      const state = getCompleteSystemState()
-      io.emit('simulation_update', state)
+      
+      getCompleteSystemState().then(state => {
+        io.emit('simulation_update', state)
+      }).catch(error => {
+        console.error('Error getting state after emergency stop:', error)
+        socket.emit('error', { message: 'Emergency stop executed but failed to get state' })
+      })
     } catch (error) {
       console.error('Emergency stop failed:', error)
       socket.emit('error', { message: error.message })
     }
   })
 
-  // ASSIGNMENT: Assignment-specific endpoints
-  socket.on('get_assignment_compliance', () => {
+  socket.on('trigger_recovery', () => {
     try {
-      const compliance = simulationEngine.getAssignmentCompliance()
-      socket.emit('assignment_compliance', compliance)
+      console.log('Manual recovery triggered by client')
+      attemptRecovery()
+      
+      setTimeout(() => {
+        getCompleteSystemState().then(state => {
+          io.emit('simulation_update', state)
+          socket.emit('recovery_complete', { success: true, timestamp: Date.now() })
+        }).catch(error => {
+          socket.emit('recovery_complete', { success: false, error: error.message })
+        })
+      }, 1000)
     } catch (error) {
-      console.error('Get assignment compliance failed:', error)
-      socket.emit('error', { message: error.message })
+      console.error('Manual recovery failed:', error)
+      socket.emit('recovery_complete', { success: false, error: error.message })
     }
+  })
+
+  socket.on('get_assignment_compliance', () => {
+    safeExecute(
+      () => simulationEngine.getAssignmentCompliance(),
+      null,
+      'get assignment compliance'
+    ).then(compliance => {
+      socket.emit('assignment_compliance', compliance)
+    }).catch(error => {
+      socket.emit('error', { message: error.message })
+    })
   })
 
   socket.on('trigger_peak_traffic', (data) => {
@@ -358,39 +577,39 @@ io.on('connection', (socket) => {
         console.log(`Triggering ${type} peak traffic`)
       }
       
-      // Generate multiple requests based on peak type
       const requestCount = type === 'morning' ? 8 : type === 'evening' ? 6 : 4
       
       for (let i = 0; i < requestCount; i++) {
         setTimeout(() => {
-          let originFloor, destinationFloor
-          
-          if (type === 'morning') {
-            // Morning: mostly lobby to upper floors
-            originFloor = Math.random() < 0.7 ? 1 : Math.floor(Math.random() * 5) + 1
-            destinationFloor = Math.floor(Math.random() * 10) + 6
-          } else if (type === 'evening') {
-            // Evening: mostly upper floors to lobby
-            originFloor = Math.floor(Math.random() * 10) + 6
-            destinationFloor = Math.random() < 0.7 ? 1 : Math.floor(Math.random() * 5) + 1
-          } else {
-            // Lunch: mixed
-            originFloor = Math.floor(Math.random() * simulationEngine.config.numFloors) + 1
-            destinationFloor = Math.floor(Math.random() * simulationEngine.config.numFloors) + 1
-            while (destinationFloor === originFloor) {
+          try {
+            let originFloor, destinationFloor
+            
+            if (type === 'morning') {
+              originFloor = Math.random() < 0.7 ? 1 : Math.floor(Math.random() * 5) + 1
+              destinationFloor = Math.floor(Math.random() * 10) + 6
+            } else if (type === 'evening') {
+              originFloor = Math.floor(Math.random() * 10) + 6
+              destinationFloor = Math.random() < 0.7 ? 1 : Math.floor(Math.random() * 5) + 1
+            } else {
+              originFloor = Math.floor(Math.random() * simulationEngine.config.numFloors) + 1
               destinationFloor = Math.floor(Math.random() * simulationEngine.config.numFloors) + 1
+              while (destinationFloor === originFloor) {
+                destinationFloor = Math.floor(Math.random() * simulationEngine.config.numFloors) + 1
+              }
             }
+            
+            simulationEngine.addRequest({
+              type: 'floor_call',
+              originFloor,
+              destinationFloor,
+              direction: destinationFloor > originFloor ? 'up' : 'down',
+              priority: 3,
+              timestamp: Date.now()
+            })
+          } catch (reqError) {
+            console.error('Error adding peak traffic request:', reqError)
           }
-          
-          simulationEngine.addRequest({
-            type: 'floor_call',
-            originFloor,
-            destinationFloor,
-            direction: destinationFloor > originFloor ? 'up' : 'down',
-            priority: 3, // High priority for peak traffic
-            timestamp: Date.now()
-          })
-        }, i * 500) // Stagger requests
+        }, i * 500)
       }
       
       socket.emit('peak_traffic_triggered', { success: true, type, requestCount })
@@ -407,16 +626,14 @@ io.on('connection', (socket) => {
   })
 })
 
-// CRITICAL: Enhanced real-time updates with proper floor requests handling
-setInterval(() => {
-  if (simulationEngine.isRunning) {
-    try {
-      const systemState = getCompleteSystemState()
-      
-      // CRITICAL: Ensure floor requests are properly formatted for frontend
+const realTimeUpdateInterval = setInterval(() => {
+  if (!simulationEngine.isRunning) return
+
+  try {
+    getCompleteSystemState().then(systemState => {
       io.emit('simulation_update', {
         elevators: systemState.elevators,
-        floorRequests: systemState.floorRequests, // FIXED: Already properly formatted, no additional processing
+        floorRequests: systemState.floorRequests,
         activeRequests: systemState.activeRequests,
         isRunning: systemState.isRunning,
         currentTime: systemState.currentTime,
@@ -424,107 +641,144 @@ setInterval(() => {
         currentAlgorithm: systemState.currentAlgorithm,
         assignmentMetrics: systemState.assignmentMetrics,
         assignmentCompliance: systemState.assignmentCompliance,
-        isInitialized: systemState.isInitialized // ADDED: Include initialization status
+        isInitialized: systemState.isInitialized
       })
 
-      // CRITICAL: Send comprehensive metrics update
-      const performanceMetrics = simulationEngine.getPerformanceMetrics()
-      const realTimeMetrics = simulationEngine.getRealTimeMetrics()
-      const assignmentCompliance = systemState.assignmentCompliance
-
-      io.emit('metrics_update', {
+      const metricsUpdate = {
         performance: {
-          ...performanceMetrics,
-          // Ensure all critical metrics are present
-          averageWaitTime: typeof performanceMetrics.averageWaitTime === 'number' ? performanceMetrics.averageWaitTime : 0,
-          starvationCount: typeof performanceMetrics.starvationCount === 'number' ? performanceMetrics.starvationCount : 0,
-          assignmentCompliance: assignmentCompliance?.complianceScore || 100,
-          peakHourEfficiency: performanceMetrics.peakHourEfficiency || 100,
-          requestDistribution: performanceMetrics.requestDistribution || {
-            lobbyToUpper: 0,
-            upperToLobby: 0, 
-            interFloor: 0,
-            total: 0
-          }
+          ...systemState.performanceMetrics,
+          averageWaitTime: typeof systemState.performanceMetrics.averageWaitTime === 'number' ? systemState.performanceMetrics.averageWaitTime : 0,
+          starvationCount: typeof systemState.performanceMetrics.starvationCount === 'number' ? systemState.performanceMetrics.starvationCount : 0,
+          assignmentCompliance: systemState.assignmentCompliance?.complianceScore || 100,
+          peakHourEfficiency: systemState.performanceMetrics.peakHourEfficiency || 100
         },
         realTime: {
-          ...realTimeMetrics,
-          starvationAlerts: realTimeMetrics.starvationAlerts || realTimeMetrics.alertsCount || 0,
-          peakHourStatus: realTimeMetrics.peakHourStatus || 'NORMAL',
-          complianceScore: assignmentCompliance?.complianceScore || 100
+          ...systemState.realTimeMetrics,
+          starvationAlerts: systemState.realTimeMetrics.starvationAlerts || systemState.realTimeMetrics.alertsCount || 0,
+          peakHourStatus: systemState.realTimeMetrics.peakHourStatus || 'NORMAL',
+          complianceScore: systemState.assignmentCompliance?.complianceScore || 100
         },
         historical: simulationEngine.getHistoricalData ? simulationEngine.getHistoricalData() : [],
         currentAlgorithm: systemState.currentAlgorithm,
         assignmentMetrics: systemState.assignmentMetrics,
-        assignmentCompliance: assignmentCompliance,
-        timestamp: Date.now()
-      })
+        assignmentCompliance: systemState.assignmentCompliance,
+        timestamp: Date.now(),
+        health: {
+          consecutiveErrors,
+          lastSuccessfulUpdate,
+          isHealthy: consecutiveErrors < MAX_CONSECUTIVE_ERRORS
+        }
+      }
 
-      // Debug logging for metrics and floor requests flow
-      if (DEBUG && (performanceMetrics.averageWaitTime > 0 || systemState.floorRequests.length > 0)) {
-        console.log(`Server Metrics Flow - Avg wait: ${performanceMetrics.averageWaitTime.toFixed(1)}s, Starvation: ${performanceMetrics.starvationCount}, Active: ${systemState.activeRequests.length}, Floor Requests: ${systemState.floorRequests.length}, Initialized: ${systemState.isInitialized}`)
+      io.emit('metrics_update', metricsUpdate)
+
+      if (DEBUG && (systemState.performanceMetrics.averageWaitTime > 0 || systemState.floorRequests.length > 0)) {
+        console.log(`Server Metrics Flow - Avg wait: ${systemState.performanceMetrics.averageWaitTime.toFixed(1)}s, Starvation: ${systemState.performanceMetrics.starvationCount}, Active: ${systemState.activeRequests.length}, Floor Requests: ${systemState.floorRequests.length}, Errors: ${consecutiveErrors}`)
       }
       
-    } catch (error) {
+    }).catch(error => {
       console.error('Real-time update error:', error)
-      io.emit('error', { message: 'Real-time update failed' })
-    }
+      consecutiveErrors++
+      
+      io.emit('error', { 
+        message: 'Real-time update failed',
+        consecutiveErrors,
+        suggestRecovery: consecutiveErrors >= 3
+      })
+      
+      if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+        console.error('Too many consecutive real-time errors, attempting recovery...')
+        attemptRecovery()
+      }
+    })
+  } catch (syncError) {
+    console.error('Synchronous error in real-time update:', syncError)
+    consecutiveErrors++
   }
 }, 1000)
 
-// Performance monitoring
-setInterval(() => {
-  if (simulationEngine.isRunning) {
-    try {
-      const systemLoad = simulationEngine.getSystemLoad()
+const performanceMonitoringInterval = setInterval(() => {
+  if (!simulationEngine.isRunning) return
+
+  try {
+    safeExecute(
+      () => simulationEngine.getSystemLoad(),
+      { activeRequests: 0, averageLoad: 0 },
+      'get system load'
+    ).then(systemLoad => {
       const currentAlgorithm = simulationEngine.getCurrentAlgorithm ? simulationEngine.getCurrentAlgorithm() : simulationEngine.config.algorithm
       
       if (DEBUG) {
-        console.log(`System Performance - Active Requests: ${systemLoad.activeRequests}, Buffered: ${systemLoad.bufferedRequests || 0}, Avg Utilization: ${(systemLoad.averageLoad * 100).toFixed(1)}%, Algorithm: ${currentAlgorithm}, Initialized: ${isSimulationInitialized}`)
+        console.log(`System Performance - Active: ${systemLoad.activeRequests}, Buffered: ${systemLoad.bufferedRequests || 0}, Utilization: ${(systemLoad.averageLoad * 100).toFixed(1)}%, Algorithm: ${currentAlgorithm}, Errors: ${consecutiveErrors}`)
       }
       
-      // Alert on performance issues
       if (systemLoad.activeRequests > simulationEngine.elevators.length * 20) {
         console.warn(`⚠️ High system load: ${systemLoad.activeRequests} active requests`)
       }
       
-    } catch (error) {
+    }).catch(error => {
       console.error('Performance monitoring error:', error)
-    }
+    })
+  } catch (syncError) {
+    console.error('Synchronous error in performance monitoring:', syncError)
   }
 }, 5000)
 
-// CRITICAL: Health check for metrics calculation and floor requests
-setInterval(() => {
-  if (simulationEngine.isRunning) {
-    try {
-      const metrics = simulationEngine.getPerformanceMetrics()
-      const servedCount = simulationEngine.servedRequestsHistory?.length || 0
-      const activeCount = simulationEngine.activeRequests?.length || 0
-      const floorRequestsCount = simulationEngine.floorRequests?.length || 0
-      
-      if (DEBUG && (servedCount > 0 || activeCount > 10 || floorRequestsCount > 0)) {
-        console.log(`Health Check - Served: ${servedCount}, Active: ${activeCount}, Floor Requests: ${floorRequestsCount}, Avg Wait: ${metrics.averageWaitTime?.toFixed(1) || 0}s, Initialized: ${isSimulationInitialized}`)
+const healthCheckInterval = setInterval(() => {
+  if (!simulationEngine.isRunning) return
+
+  try {
+    const now = Date.now()
+    const timeSinceLastUpdate = now - lastSuccessfulUpdate
+    
+    if (timeSinceLastUpdate > 30000) {
+      console.warn(`⚠️ Potential deadlock detected: No successful updates for ${timeSinceLastUpdate}ms`)
+      attemptRecovery()
+      return
+    }
+    
+    safeExecute(
+      () => ({
+        metrics: simulationEngine.getPerformanceMetrics(),
+        served: simulationEngine.servedRequestsHistory?.length || 0,
+        active: simulationEngine.activeRequests?.length || 0,
+        floor: simulationEngine.floorRequests?.length || 0
+      }),
+      { metrics: { averageWaitTime: 0 }, served: 0, active: 0, floor: 0 },
+      'health check data'
+    ).then(({ metrics, served, active, floor }) => {
+      if (DEBUG && (served > 0 || active > 10 || floor > 0)) {
+        console.log(`Health Check - Served: ${served}, Active: ${active}, Floor: ${floor}, Avg Wait: ${metrics.averageWaitTime?.toFixed(1) || 0}s, Errors: ${consecutiveErrors}, Last Update: ${timeSinceLastUpdate}ms ago`)
       }
       
-      // Alert if metrics seem stuck
-      if (servedCount > 10 && metrics.averageWaitTime === 0) {
+      if (served > 10 && metrics.averageWaitTime === 0) {
         console.warn('⚠️ Metrics calculation issue: No average wait time despite served requests')
       }
       
-      // Alert if floor requests aren't working
-      if (floorRequestsCount === 0 && activeCount > 5) {
+      if (floor === 0 && active > 5) {
         console.warn('⚠️ Floor requests may not be registering properly')
       }
       
-      // Alert if simulation seems stuck in uninitialized state
       if (!isSimulationInitialized && simulationEngine.isRunning) {
         console.warn('⚠️ Simulation running but not properly initialized')
       }
       
-    } catch (error) {
+      if (simulationEngine.activeRequests && Array.isArray(simulationEngine.activeRequests)) {
+        const hangingRequests = simulationEngine.activeRequests.filter(req => {
+          const waitTime = now - (req.timestamp || 0)
+          return waitTime > 180000
+        })
+        
+        if (hangingRequests.length > 0) {
+          console.warn(`⚠️ Found ${hangingRequests.length} requests waiting over 3 minutes - potential hanging requests`)
+        }
+      }
+      
+    }).catch(error => {
       console.error('Health check error:', error)
-    }
+    })
+  } catch (syncError) {
+    console.error('Synchronous error in health check:', syncError)
   }
 }, 10000)
 
@@ -533,26 +787,25 @@ server.listen(PORT, () => {
   console.log(`Dashboard available at http://localhost:${PORT}`)
   console.log(`WebSocket endpoint: ws://localhost:${PORT}`)
   if (DEBUG) {
-    console.log('Debug mode enabled - enhanced logging active')
+    console.log('Debug mode enabled - enhanced logging and deadlock detection active')
     console.log('Pause/restart functionality: State preservation enabled')
+    console.log(`Error recovery: Max consecutive errors = ${MAX_CONSECUTIVE_ERRORS}, Timeout = ${UPDATE_TIMEOUT}ms`)
   }
 })
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received, shutting down gracefully')
+function gracefulShutdown(signal) {
+  console.log(`${signal} received, shutting down gracefully`)
+  
+  clearInterval(realTimeUpdateInterval)
+  clearInterval(performanceMonitoringInterval)
+  clearInterval(healthCheckInterval)
+  
   simulationEngine.stop()
   server.close(() => {
     console.log('Server closed')
     process.exit(0)
   })
-})
+}
 
-process.on('SIGINT', () => {
-  console.log('SIGINT received, shutting down gracefully')
-  simulationEngine.stop()
-  server.close(() => {
-    console.log('Server closed')
-    process.exit(0)
-  })
-})
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'))
+process.on('SIGINT', () => gracefulShutdown('SIGINT'))

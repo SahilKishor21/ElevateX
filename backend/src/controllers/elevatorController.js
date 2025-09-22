@@ -70,8 +70,6 @@ class ElevatorController {
 
   emergencyStop() {
     this.simulationEngine.stop()
-    
-    // Set all elevators to emergency state
     this.simulationEngine.elevators.forEach(elevator => {
       elevator.state = 'maintenance'
       elevator.requestQueue = []
@@ -101,13 +99,11 @@ class ElevatorController {
     let healthScore = 100
     const issues = []
 
-    // Check for starving requests
     if (metrics.starvationCount > 0) {
       healthScore -= metrics.starvationCount * 10
       issues.push(`${metrics.starvationCount} requests waiting too long`)
     }
 
-    // Check system load
     const activeElevators = state.elevators.filter(e => e.state !== 'idle').length
     const utilizationRate = state.elevators.length > 0 ? activeElevators / state.elevators.length : 0
     

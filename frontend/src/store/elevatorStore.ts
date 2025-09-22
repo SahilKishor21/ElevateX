@@ -14,7 +14,7 @@ interface ElevatorStore {
   config: ElevatorConfig
   isRunning: boolean
   currentTime: number
-  floorRequests: FloorRequest[] // CRITICAL: Floor requests state
+  floorRequests: FloorRequest[]
   activeRequests: Request[]
   assignmentMetrics?: any
   
@@ -23,8 +23,8 @@ interface ElevatorStore {
   updateConfig: (updates: Partial<ElevatorConfig>) => void
   setIsRunning: (running: boolean) => void
   setCurrentTime: (time: number) => void
-  setFloorRequests: (requests: FloorRequest[]) => void // CRITICAL: Setter for floor requests
-  addFloorRequest: (floor: number, direction: 'up' | 'down') => void // CRITICAL: Add individual floor request
+  setFloorRequests: (requests: FloorRequest[]) => void
+  addFloorRequest: (floor: number, direction: 'up' | 'down') => void
   setActiveRequests: (requests: Request[]) => void
   setAssignmentMetrics: (metrics: any) => void
   reset: () => void
@@ -43,7 +43,7 @@ export const useElevatorStore = create<ElevatorStore>((set, get) => ({
   config: defaultConfig,
   isRunning: false,
   currentTime: 0,
-  floorRequests: [], // CRITICAL: Initialize floor requests
+  floorRequests: [],
   activeRequests: [],
   assignmentMetrics: undefined,
 
@@ -59,23 +59,17 @@ export const useElevatorStore = create<ElevatorStore>((set, get) => ({
   
   setCurrentTime: (currentTime) => set({ currentTime }),
   
-  // CRITICAL: Set floor requests from server
   setFloorRequests: (floorRequests) => {
-    console.log('Store - Setting floor requests:', floorRequests)
     set({ floorRequests })
   },
   
-  // CRITICAL: Add individual floor request
   addFloorRequest: (floor, direction) => {
-    console.log(`Store - Adding floor request: Floor ${floor}, Direction ${direction}`)
     set((state) => {
-      // Check if request already exists
       const exists = state.floorRequests.some(
         req => req.floor === floor && req.direction === direction && req.active
       )
       
       if (exists) {
-        console.log('Floor request already exists, skipping')
         return state
       }
       
@@ -87,7 +81,6 @@ export const useElevatorStore = create<ElevatorStore>((set, get) => ({
       }
       
       const newFloorRequests = [...state.floorRequests, newRequest]
-      console.log('Store - New floor requests array:', newFloorRequests)
       
       return { floorRequests: newFloorRequests }
     })
@@ -101,7 +94,7 @@ export const useElevatorStore = create<ElevatorStore>((set, get) => ({
     elevators: [],
     isRunning: false,
     currentTime: 0,
-    floorRequests: [], // CRITICAL: Reset floor requests
+    floorRequests: [], 
     activeRequests: [],
     assignmentMetrics: undefined,
     config: defaultConfig

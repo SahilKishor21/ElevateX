@@ -1,30 +1,26 @@
 class ScanAlgorithm {
   constructor() {
     this.name = 'SCAN'
-    // Track each elevator's scan direction - once set, it continues until reaching end
-    this.elevatorScanDirections = new Map() // elevatorId -> 'up' | 'down'
-    this.lastDirectionChange = new Map() // Track when elevator last changed direction
+
+    this.elevatorScanDirections = new Map()
+    this.lastDirectionChange = new Map()
   }
 
   assignRequests(elevators, requests) {
     const pendingRequests = requests.filter(r => r.isActive && !r.assignedElevator)
     
     console.log(`\nSCAN: Processing ${pendingRequests.length} pending requests`)
-    
-    // Initialize scan directions for new elevators
+   
     elevators.forEach(elevator => {
       if (!this.elevatorScanDirections.has(elevator.id)) {
-        // Start with upward direction by default
         this.elevatorScanDirections.set(elevator.id, 'up')
         this.lastDirectionChange.set(elevator.id, Date.now())
         console.log(`SCAN: Initializing E${elevator.id} with UP scan direction`)
       }
     })
 
-    // Update scan directions based on current elevator states
     this.updateScanDirections(elevators)
 
-    // Process each request using SCAN logic
     pendingRequests.forEach(request => {
       const bestElevator = this.findBestElevatorSCAN(request, elevators)
       if (bestElevator && !bestElevator.isFull()) {
@@ -130,10 +126,7 @@ class ScanAlgorithm {
   updateScanDirections(elevators) {
     elevators.forEach(elevator => {
       const currentScanDirection = this.elevatorScanDirections.get(elevator.id)
-      
-      // Check if elevator has reached the end of its scan direction
       if (this.shouldReverseScanDirection(elevator, currentScanDirection)) {
-        // Reverse scan direction
         const newDirection = currentScanDirection === 'up' ? 'down' : 'up'
         this.elevatorScanDirections.set(elevator.id, newDirection)
         this.lastDirectionChange.set(elevator.id, Date.now())
@@ -144,55 +137,41 @@ class ScanAlgorithm {
   }
 
   shouldReverseScanDirection(elevator, scanDirection) {
-    const maxFloors = 15 // Get from config if available
-    
-    // Don't change direction too frequently (avoid oscillation)
+    const maxFloors = 15
     const lastChange = this.lastDirectionChange.get(elevator.id) || 0
     if (Date.now() - lastChange < 5000) return false
 
     if (scanDirection === 'up') {
-      // Reverse if at top floor OR no more upward destinations
       const atTopFloor = elevator.currentFloor >= maxFloors
-      const noUpwardDestinations = elevator.requestQueue.length === 0 || 
+      const noUpwardDestinations = elevator.requestQueue.length === 0 ||
                                    Math.max(...elevator.requestQueue, elevator.currentFloor) <= elevator.currentFloor
-      
       return atTopFloor || (elevator.requestQueue.length > 0 && noUpwardDestinations)
-      
     } else if (scanDirection === 'down') {
-      // Reverse if at bottom floor OR no more downward destinations
       const atBottomFloor = elevator.currentFloor <= 1
-      const noDownwardDestinations = elevator.requestQueue.length === 0 || 
+      const noDownwardDestinations = elevator.requestQueue.length === 0 ||
                                     Math.min(...elevator.requestQueue, elevator.currentFloor) >= elevator.currentFloor
-      
       return atBottomFloor || (elevator.requestQueue.length > 0 && noDownwardDestinations)
     }
-    
     return false
   }
 
-  // Sort elevator request queue according to SCAN algorithm
   sortRequestQueue(elevator, queue) {
     const scanDirection = this.elevatorScanDirections.get(elevator.id)
     const currentFloor = elevator.currentFloor
-    
+
     console.log(`SCAN: Sorting queue for E${elevator.id} - scan:${scanDirection}, floor:${currentFloor}, queue:[${queue.join(',')}]`)
-    
+
     if (scanDirection === 'up') {
-      // SCAN UP: serve floors above current first (ascending), then floors below (descending for return trip)
       const above = queue.filter(floor => floor > currentFloor).sort((a, b) => a - b)
       const atCurrent = queue.filter(floor => floor === currentFloor)
       const below = queue.filter(floor => floor < currentFloor).sort((a, b) => b - a)
-      
       const sorted = [...atCurrent, ...above, ...below]
       console.log(`SCAN: UP sort result: [${sorted.join(',')}]`)
       return sorted
-      
     } else {
-      // SCAN DOWN: serve floors below current first (descending), then floors above (ascending for return trip)  
       const below = queue.filter(floor => floor < currentFloor).sort((a, b) => b - a)
       const atCurrent = queue.filter(floor => floor === currentFloor)
       const above = queue.filter(floor => floor > currentFloor).sort((a, b) => a - b)
-      
       const sorted = [...atCurrent, ...below, ...above]
       console.log(`SCAN: DOWN sort result: [${sorted.join(',')}]`)
       return sorted
@@ -202,14 +181,13 @@ class ScanAlgorithm {
   getMetrics(elevators, requests) {
     const servedRequests = requests.filter(r => r.isServed)
     const waitTimes = servedRequests.map(r => r.waitTime)
-    
+
     return {
       algorithm: this.name,
       averageWaitTime: waitTimes.length > 0 ? waitTimes.reduce((a, b) => a + b, 0) / waitTimes.length : 0,
       maxWaitTime: waitTimes.length > 0 ? Math.max(...waitTimes) : 0,
       totalServed: servedRequests.length,
       efficiency: this.calculateEfficiency(elevators, servedRequests),
-      // SCAN-specific metrics
       scanDirections: Object.fromEntries(this.elevatorScanDirections),
       directionChanges: this.getDirectionChangeCount()
     }
@@ -221,18 +199,15 @@ class ScanAlgorithm {
   }
 
   getDirectionChangeCount() {
-    // In a real implementation, this would track direction changes over time
     return this.elevatorScanDirections.size
   }
 
-  // Method to reset scan directions (useful for algorithm switching)
   resetScanDirections() {
     console.log('SCAN: Resetting all scan directions')
     this.elevatorScanDirections.clear()
     this.lastDirectionChange.clear()
   }
 
-  // Get current scan direction for an elevator (useful for debugging)
   getElevatorScanDirection(elevatorId) {
     return this.elevatorScanDirections.get(elevatorId) || 'up'
   }

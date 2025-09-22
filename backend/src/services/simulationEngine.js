@@ -16,33 +16,24 @@ class SimulationEngine {
     this.currentTime = 0;
     this.startTime = null;
     this.intervalId = null;
-
-    // Initialize schedulers
     this.hybridScheduler = new HybridScheduler();
     this.scanAlgorithm = new ScanAlgorithm();
     this.currentAlgorithm = "hybrid";
     this.scheduler = this.hybridScheduler;
-
     this.metricsService = new MetricsService();
     this.requestIdCounter = 0;
     this.requestBuffer = [];
     this.lastOptimizationTime = 0;
-
-    // Track metrics for each algorithm separately
     this.algorithmMetrics = {
       hybrid: { totalRequests: 0, servedRequests: 0, totalDistance: 0 },
       scan: { totalRequests: 0, servedRequests: 0, totalDistance: 0 },
     };
-
-    // Speed configurations for UI
     this.SPEED_OPTIONS = [
       { value: 1, label: "1x Normal" },
       { value: 2, label: "2x Fast" },
       { value: 5, label: "5x Very Fast" },
       { value: 10, label: "10x Ultra Fast" },
     ];
-
-    // Assignment-specific metrics
     this.assignmentMetrics = {
       lobbyToUpperRequests: 0,
       upperToLobbyRequests: 0,
@@ -50,8 +41,6 @@ class SimulationEngine {
       starvationEvents: 0,
       thirtySecondEscalations: 0,
     };
-
-    // Debug mode
     this.debug = process.env.NODE_ENV === 'development';
   }
 
@@ -59,24 +48,18 @@ class SimulationEngine {
     if (!["hybrid", "scan"].includes(algorithm)) {
       throw new Error('Invalid algorithm. Must be "hybrid" or "scan"');
     }
-
     if (this.debug) {
       console.log(`Switching from ${this.currentAlgorithm} to ${algorithm}`);
     }
-
     this.currentAlgorithm = algorithm;
     this.scheduler =
       algorithm === "hybrid" ? this.hybridScheduler : this.scanAlgorithm;
-
-    // Reset algorithm-specific state when switching
     if (algorithm === "scan") {
       this.scanAlgorithm.resetScanDirections();
       if (this.debug) {
         console.log("SCAN algorithm initialized with fresh scan directions");
       }
     }
-
-    // Clear existing assignments to allow new algorithm to reassign
     this.activeRequests.forEach((request) => {
       if (request.isActive && !request.isServed) {
         request.assignedElevator = null;
@@ -87,11 +70,9 @@ class SimulationEngine {
         }
       }
     });
-
     if (this.debug) {
       console.log(`Algorithm switched to: ${algorithm}`);
     }
-
     return {
       success: true,
       algorithm: this.currentAlgorithm,
@@ -129,7 +110,6 @@ class SimulationEngine {
     const overCapacityElevators = this.elevators.filter(
       (e) => e.passengers.length > e.capacity
     ).length;
-
     const totalSystemCapacity =
       this.elevators.length * (this.config.capacity || 8);
     const currentOccupancy = this.elevators.reduce(
@@ -138,13 +118,11 @@ class SimulationEngine {
     );
     const systemUtilization =
       totalSystemCapacity > 0 ? currentOccupancy / totalSystemCapacity : 0;
-
     const performanceStatus = this.getPerformanceStatus(
       activeRequestsCount,
       systemUtilization,
       averageLoad
     );
-
     return {
       activeRequests: activeRequestsCount,
       bufferedRequests: bufferedRequestsCount,
@@ -198,14 +176,10 @@ class SimulationEngine {
     if (this.debug) {
       console.log("Emergency stop initiated");
     }
-
     this.stop();
-
-    // Clear all requests and buffers
     this.activeRequests = [];
     this.requestBuffer = [];
     this.floorRequests = [];
-
     this.elevators.forEach((elevator) => {
       elevator.state = "idle";
       elevator.requestQueue = [];
@@ -213,7 +187,6 @@ class SimulationEngine {
       elevator.passengers = [];
       elevator.doorOpen = false;
     });
-
     if (this.debug) {
       console.log("Emergency stop completed - all systems cleared");
     }
@@ -227,14 +200,10 @@ class SimulationEngine {
     this.floorRequests = [];
     this.requestBuffer = [];
     this.currentTime = 0;
-
-    // Reset algorithm metrics
     this.algorithmMetrics = {
       hybrid: { totalRequests: 0, servedRequests: 0, totalDistance: 0 },
       scan: { totalRequests: 0, servedRequests: 0, totalDistance: 0 },
     };
-
-    // Reset assignment metrics
     this.assignmentMetrics = {
       lobbyToUpperRequests: 0,
       upperToLobbyRequests: 0,
@@ -242,7 +211,6 @@ class SimulationEngine {
       starvationEvents: 0,
       thirtySecondEscalations: 0,
     };
-
     for (let i = 0; i < this.config.numElevators; i++) {
       const colors = [
         "#3b82f6",
@@ -254,27 +222,20 @@ class SimulationEngine {
         "#ec4899",
         "#84cc16",
       ];
-
       const elevator = new Elevator(
         i,
         this.config.capacity,
         colors[i % colors.length]
       );
-
       if (typeof elevator.setSpeed === "function") {
         elevator.setSpeed(this.config.speed || 1);
       }
-
       this.elevators.push(elevator);
     }
-
-    // Reset SCAN algorithm state on initialization
     if (this.currentAlgorithm === "scan") {
       this.scanAlgorithm.resetScanDirections();
     }
-
     this.metricsService.reset();
-    
     if (this.debug) {
       console.log(
         `Initialized ${this.config.numElevators} elevators with ${
@@ -286,17 +247,13 @@ class SimulationEngine {
 
   start() {
     if (this.isRunning) return false;
-
     this.isRunning = true;
     this.startTime = Date.now();
-
     if (this.debug) {
       console.log(
         `Starting simulation with ${this.currentAlgorithm} algorithm, request frequency: ${this.config.requestFrequency}/min`
       );
     }
-
-    // Position elevators based on time of day
     if (this.config.requestFrequency > 0) {
       this.positionElevatorsInitially();
       if (this.debug) {
@@ -306,17 +263,13 @@ class SimulationEngine {
       if (this.debug) {
         console.log("Initial elevator positioning disabled (request frequency = 0)");
       }
-      // Clear any existing requests when starting with 0 frequency
       this.activeRequests = [];
       this.floorRequests = [];
       this.requestBuffer = [];
     }
-
     this.intervalId = setInterval(() => {
       this.update();
     }, DEFAULT_CONFIG.SIMULATION_INTERVAL);
-
-    // Start request generator if frequency > 0
     if (this.config.requestFrequency > 0) {
       this.requestGeneratorInterval = setInterval(() => {
         if (Math.random() < this.config.requestFrequency / 600) {
@@ -332,38 +285,30 @@ class SimulationEngine {
       }
       this.requestGeneratorInterval = null;
     }
-
     return true;
   }
 
   positionElevatorsInitially() {
     const hour = new Date().getHours();
-
     this.elevators.forEach((elevator, index) => {
       let targetFloor = 1;
-
       if (hour >= 8 && hour <= 10) {
-        // Morning rush: position near lobby and mid-floors
         targetFloor =
           index % 2 === 0 ? 1 : Math.floor(this.config.numFloors * 0.3) + 1;
       } else if (hour >= 17 && hour <= 19) {
-        // Evening rush: position in upper floors
         targetFloor = Math.floor(this.config.numFloors * 0.7) + index;
         targetFloor = Math.min(targetFloor, this.config.numFloors);
       } else if (hour >= 12 && hour <= 14) {
-        // Lunch: distribute around middle floors
         targetFloor =
           Math.floor(this.config.numFloors / 2) +
           (index - Math.floor(this.elevators.length / 2));
         targetFloor = Math.max(1, Math.min(this.config.numFloors, targetFloor));
       } else {
-        // Normal distribution
         targetFloor =
           Math.floor(
             ((index + 1) * this.config.numFloors) / (this.elevators.length + 1)
           ) + 1;
       }
-
       if (elevator.currentFloor !== targetFloor) {
         if (this.debug) {
           console.log(
@@ -377,7 +322,6 @@ class SimulationEngine {
 
   stop() {
     if (!this.isRunning) return false;
-
     this.isRunning = false;
     if (this.intervalId) {
       clearInterval(this.intervalId);
@@ -387,7 +331,6 @@ class SimulationEngine {
       clearInterval(this.requestGeneratorInterval);
       this.requestGeneratorInterval = null;
     }
-
     if (this.debug) {
       console.log(`Simulation stopped. Algorithm: ${this.currentAlgorithm}`);
     }
@@ -396,14 +339,10 @@ class SimulationEngine {
 
   reset() {
     this.stop();
-
-    // Clear all requests and elevator states completely
     this.floorRequests = [];
     this.activeRequests = [];
     this.servedRequestsHistory = [];
     this.requestBuffer = [];
-
-    // Reset all elevators to ground floor and idle state
     this.elevators.forEach((elevator) => {
       elevator.currentFloor = 1;
       elevator.targetFloor = null;
@@ -415,7 +354,6 @@ class SimulationEngine {
       elevator.loadingStartTime = null;
       elevator.doorOpenTime = null;
     });
-
     if (this.debug) {
       console.log("System completely reset - all elevators at floor 1, idle state");
     }
@@ -429,22 +367,15 @@ class SimulationEngine {
     );
   }
 
-  // CRITICAL FIX: Enhanced update loop with proper request handling
   update() {
     const updateStart = Date.now();
     this.currentTime = Date.now() - this.startTime;
-
-    // Process request buffer
     if (this.requestBuffer.length > 0) {
       this.processRequestBuffer();
     }
-
-    // CRITICAL: Update request wait times BEFORE serving
     this.activeRequests.forEach(request => {
       if (request.isActive && !request.isServed && typeof request.updateWaitTime === 'function') {
         request.updateWaitTime();
-        
-        // Track 30-second escalations
         if (request.waitTime > 30000 && !request.thirtySecondEscalated) {
           request.thirtySecondEscalated = true;
           this.assignmentMetrics.thirtySecondEscalations++;
@@ -454,37 +385,26 @@ class SimulationEngine {
         }
       }
     });
-
-    // CRITICAL: Detect and fix stuck/orphaned requests
     const stuckRequests = this.activeRequests.filter(r => {
       if (!r.isActive || r.isServed) return false;
-      
       if (r.assignedElevator !== null && r.assignedElevator !== undefined) {
         const elevator = this.elevators[r.assignedElevator];
-        
         if (elevator) {
           const hasInQueue = elevator.requestQueue && 
                             elevator.requestQueue.includes(r.originFloor);
           const isAtFloor = elevator.currentFloor === r.originFloor && 
                            elevator.state === 'loading';
-          
           if (hasInQueue || isAtFloor) {
             return false;
           }
         }
-        
-        // Assignment is broken
         if (this.debug) {
           console.log(`STUCK REQUEST: ${r.id} assigned to E${r.assignedElevator} but not in queue`);
         }
         return true;
       }
-      
-      // Also consider long-waiting unassigned requests as stuck
       return r.waitTime > 5000 && !r.assignedElevator;
     });
-
-    // Force clear bad assignments
     if (stuckRequests.length > 0) {
       if (this.debug) {
         console.log(`CRITICAL: ${stuckRequests.length} stuck requests detected, forcing reassignment`);
@@ -493,98 +413,85 @@ class SimulationEngine {
         request.assignedElevator = null;
       });
     }
-
-    // Get unassigned requests
     const unassignedRequests = this.activeRequests.filter(r => 
       r.isActive && 
       !r.isServed && 
       (r.assignedElevator === null || r.assignedElevator === undefined)
     );
-
-    // EMERGENCY: Force assignment if idle elevators exist while requests starve
     const idleElevators = this.elevators.filter(e => 
       e.state === 'idle' && 
       (!e.requestQueue || e.requestQueue.length === 0) &&
       !e.maintenanceMode
     );
-    
     const starvingRequests = this.activeRequests.filter(r => 
       r.isActive && !r.isServed && r.waitTime > 60000
     );
-
     if (idleElevators.length > 0 && starvingRequests.length > 0) {
       if (this.debug) {
         console.log(`EMERGENCY: ${idleElevators.length} idle elevators while ${starvingRequests.length} requests starving!`);
       }
-      
       starvingRequests.forEach((request, index) => {
         if (index < idleElevators.length) {
           const elevator = idleElevators[index];
           if (this.debug) {
             console.log(`FORCE ASSIGNING: Starving request ${request.id} to idle E${elevator.id}`);
           }
-          
           request.assignedElevator = elevator.id;
           request.assign(elevator.id);
           elevator.addRequest(request.originFloor);
           if (request.destinationFloor) {
             elevator.addRequest(request.destinationFloor);
           }
-          
           if (elevator.state === 'idle' && elevator.currentFloor !== request.originFloor) {
             elevator.moveTo(request.originFloor);
           }
         }
       });
     }
-
-    // Run scheduling algorithms for unassigned requests
     if (unassignedRequests.length > 0) {
       if (this.debug) {
         console.log(`Processing ${unassignedRequests.length} unassigned requests (${this.activeRequests.length} total active)`);
       }
-      
       if (this.currentAlgorithm === 'hybrid') {
-        this.scheduler.optimizeRoutes(this.elevators, this.activeRequests);
-        
+        if (typeof this.scheduler.optimizeRoutes === 'function') {
+          this.scheduler.optimizeRoutes(this.elevators, this.activeRequests);
+        } else {
+          this.assignRequestsBasic(this.elevators, unassignedRequests);
+        }
         if (this.config.requestFrequency > 0) {
-          this.scheduler.positionIdleElevators(this.elevators, this.config.numFloors);
+          this.positionIdleElevators();
         }
       } else if (this.currentAlgorithm === 'scan') {
-        this.scheduler.assignRequests(this.elevators, this.activeRequests);
+        if (typeof this.scheduler.assignRequests === 'function') {
+          this.scheduler.assignRequests(this.elevators, this.activeRequests);
+        } else {
+          this.assignRequestsBasic(this.elevators, unassignedRequests);
+        }
       }
-
       this.syncElevatorTargetsWithAssignments();
     }
-
-    // Update elevators
     this.elevators.forEach(elevator => {
       if (this.currentAlgorithm === 'scan' && elevator.requestQueue.length > 1) {
-        elevator.requestQueue = this.scheduler.sortRequestQueue(elevator, elevator.requestQueue);
+        if (typeof this.scheduler.sortRequestQueue === 'function') {
+          elevator.requestQueue = this.scheduler.sortRequestQueue(elevator, elevator.requestQueue);
+        } else {
+          elevator.requestQueue = this.sortRequestQueueScan(elevator, elevator.requestQueue);
+        }
       }
-
       elevator.update();
-      
       if (elevator.state === 'loading' && elevator.doorOpen) {
         this.handleElevatorAtFloor(elevator);
       }
     });
-
-    // Position idle elevators (only when no pending requests and frequency > 0)
     if (unassignedRequests.length === 0 && this.config.requestFrequency > 0) {
       this.positionIdleElevators();
     }
-
     this.cleanup();
-
     this.algorithmMetrics[this.currentAlgorithm].totalDistance = this.elevators.reduce(
       (sum, e) => sum + (e.totalDistance || 0), 0
     );
-    
-    // CRITICAL: Update metrics with current state
     this.metricsService.update(this.elevators, this.activeRequests);
     this.updateAssignmentMetrics();
-
     if (this.debug && this.activeRequests.length > 50) {
       const processingTime = Date.now() - updateStart;
       console.log(`High-volume processing: ${this.activeRequests.length} requests, ${processingTime}ms`);
@@ -595,7 +502,6 @@ class SimulationEngine {
     if (this.debug) {
       console.log("Syncing elevator targets with assignments");
     }
-
     this.activeRequests.forEach((request) => {
       if (
         request.assignedElevator !== null &&
@@ -631,13 +537,10 @@ class SimulationEngine {
     });
   }
 
-  // CRITICAL FIX: Enhanced elevator floor handling with proper metrics
   handleElevatorAtFloor(elevator) {
     if (this.debug) {
       console.log(`E${elevator.id} doors open at floor ${elevator.currentFloor}`);
     }
-
-    // Handle passenger exits
     const exitingPassengers = elevator.passengers.filter(
       (p) => p.destinationFloor === elevator.currentFloor
     );
@@ -647,8 +550,6 @@ class SimulationEngine {
         console.log(`Passenger ${passenger.id} exited at floor ${elevator.currentFloor}`);
       }
     });
-
-    // CRITICAL: Handle passenger boarding with proper wait time capture
     const boardingRequests = this.activeRequests.filter(
       (req) =>
         req.originFloor === elevator.currentFloor &&
@@ -656,29 +557,21 @@ class SimulationEngine {
         req.isActive &&
         !req.isServed
     );
-
     if (this.debug && boardingRequests.length > 0) {
       console.log(`${boardingRequests.length} passengers boarding E${elevator.id}`);
     }
-
     boardingRequests.forEach((request) => {
       if (elevator.passengers.length < elevator.capacity) {
-        // CRITICAL: Update wait time one final time before serving
         if (typeof request.updateWaitTime === "function") {
           request.updateWaitTime();
         }
-
-        // CRITICAL: Capture the final wait time BEFORE serving
         const finalWaitTime = request.waitTime;
-
-        // Track starvation events
         if (finalWaitTime > 60000) {
           this.assignmentMetrics.starvationEvents++;
           if (this.debug) {
             console.log(`STARVATION EVENT: Request ${request.id} waited ${Math.round(finalWaitTime/1000)}s`);
           }
         }
-
         const passenger = {
           id: request.id,
           originFloor: request.originFloor,
@@ -688,25 +581,15 @@ class SimulationEngine {
           priority: request.priority,
           isRealRequest: true,
         };
-
         elevator.passengers.push(passenger);
         elevator.addRequest(passenger.destinationFloor);
-
         this.algorithmMetrics[this.currentAlgorithm].servedRequests++;
-
-        // CRITICAL: Store the final wait time to prevent further updates
         request.finalWaitTime = finalWaitTime;
-
-        // Serve the request
         request.serve();
-
-        // CRITICAL: Add to metrics AFTER serving with correct wait time
         this.metricsService.addRequestToHistory(request);
-
         if (request.direction) {
           this.removeFloorRequest(request.originFloor, request.direction);
         }
-
         if (this.debug) {
           console.log(
             `Request served: ${request.originFloor}→${
@@ -719,18 +602,14 @@ class SimulationEngine {
   }
 
   positionIdleElevators() {
-    // Don't reposition elevators if request frequency is 0
     if (this.config.requestFrequency === 0) {
       if (this.debug) {
         console.log("Idle elevator positioning disabled (request frequency = 0)");
       }
       return;
     }
-
     const hour = new Date().getHours();
     const isPeakHour = [8, 9, 12, 13, 17, 18].includes(hour);
-
-    // Only for hybrid algorithm
     if (this.currentAlgorithm === "hybrid") {
       const idleElevators = this.elevators.filter(
         (e) =>
@@ -741,7 +620,6 @@ class SimulationEngine {
             (r) => r.assignedElevator === e.id && r.isActive && !r.isServed
           )
       );
-
       if (idleElevators.length > 0) {
         if (this.debug) {
           console.log(
@@ -750,40 +628,32 @@ class SimulationEngine {
             })`
           );
         }
-
         idleElevators.forEach((elevator, index) => {
           let targetFloor = 1;
-
           if (isPeakHour) {
             if (hour >= 8 && hour <= 10) {
-              // Morning: lobby and lower floors
               targetFloor =
                 index % 3 === 0
                   ? 1
                   : Math.floor(this.config.numFloors * 0.2) + index;
             } else if (hour >= 17 && hour <= 19) {
-              // Evening: upper floors
               targetFloor = Math.floor(this.config.numFloors * 0.8) - index;
             } else {
-              // Lunch: middle floors
               targetFloor =
                 Math.floor(this.config.numFloors / 2) +
                 (index - Math.floor(idleElevators.length / 2));
             }
           } else {
-            // Normal distribution
             targetFloor =
               Math.floor(
                 ((index + 1) * this.config.numFloors) /
                   (idleElevators.length + 1)
               ) + 1;
           }
-
           targetFloor = Math.max(
             1,
             Math.min(this.config.numFloors, targetFloor)
           );
-
           if (elevator.currentFloor !== targetFloor) {
             if (this.debug) {
               console.log(`Positioning idle E${elevator.id} to floor ${targetFloor}`);
@@ -796,24 +666,17 @@ class SimulationEngine {
   }
 
   cleanup() {
-    // Clean up served requests
     const servedRequests = this.activeRequests.filter((req) => req.isServed);
     this.activeRequests = this.activeRequests.filter((req) => req.isActive);
-
     if (servedRequests.length > 0) {
-      // Add to simulation history
       this.servedRequestsHistory.push(...servedRequests);
-
       if (this.servedRequestsHistory.length > 100) {
         this.servedRequestsHistory = this.servedRequestsHistory.slice(-100);
       }
-
       if (this.debug) {
         console.log(`Cleaned up ${servedRequests.length} served requests`);
       }
     }
-
-    // Clean up expired floor requests
     this.floorRequests = this.floorRequests.filter((req) => {
       const isExpired = Date.now() - req.timestamp > 120000;
       return !isExpired && req.active;
@@ -821,7 +684,6 @@ class SimulationEngine {
   }
 
   addRequest(requestData) {
-    // Prevent system overload
     if (this.activeRequests.length > this.elevators.length * 30) {
       if (this.debug) {
         console.warn("System overloaded - request buffered");
@@ -833,15 +695,11 @@ class SimulationEngine {
       this.requestBuffer.push(request);
       return request.id;
     }
-
     const request = new Request({
       ...requestData,
       id: `req_${++this.requestIdCounter}_${Date.now()}`,
     });
-
     this.algorithmMetrics[this.currentAlgorithm].totalRequests++;
-
-    // Track assignment metrics immediately
     if (request.originFloor === 1 && request.destinationFloor > 5) {
       this.assignmentMetrics.lobbyToUpperRequests++;
       if (this.debug) {
@@ -857,7 +715,6 @@ class SimulationEngine {
         );
       }
     }
-
     const hour = new Date().getHours();
     if ([8, 9, 12, 13, 17, 18].includes(hour)) {
       this.assignmentMetrics.peakHourRequests++;
@@ -867,21 +724,16 @@ class SimulationEngine {
         );
       }
     }
-
     if (this.debug) {
       console.log(
         `Request ${request.originFloor} → ${request.destinationFloor} (${this.currentAlgorithm})`
       );
     }
-
     this.activeRequests.push(request);
-
     if (request.direction) {
       this.addFloorRequest(request.originFloor, request.direction);
     }
-
     this.updateAssignmentMetrics();
-
     return request.id;
   }
 
@@ -889,22 +741,18 @@ class SimulationEngine {
     const systemLoad =
       this.activeRequests.length / (this.elevators.length * 10);
     const batchSize = systemLoad > 0.8 ? 25 : systemLoad > 0.5 ? 15 : 10;
-
     const batch = this.requestBuffer.splice(0, batchSize);
-    
     if (this.debug) {
       console.log(
         `Processing request buffer: ${batch.length} requests (batch size: ${batchSize})`
       );
     }
-
     batch.forEach((request) => {
       this.activeRequests.push(request);
       if (request.direction) {
         this.addFloorRequest(request.originFloor, request.direction);
       }
     });
-
     if (this.requestBuffer.length > 100) {
       if (this.debug) {
         console.warn(`Large request buffer: ${this.requestBuffer.length} requests pending`);
@@ -916,7 +764,6 @@ class SimulationEngine {
     const existing = this.floorRequests.find(
       (req) => req.floor === floor && req.direction === direction && req.active
     );
-
     if (!existing) {
       this.floorRequests.push({
         floor,
@@ -928,25 +775,19 @@ class SimulationEngine {
   }
 
   generateRandomRequest() {
-    // Prevent system overload during high-volume scenarios
     if (this.activeRequests.length > this.elevators.length * 25) {
       if (this.debug) {
         console.log("System at capacity - throttling random request generation");
       }
       return;
     }
-
     const hour = new Date().getHours();
     const minute = new Date().getMinutes();
-
     let originFloor,
       destinationFloor,
       priority = 2;
-
-    // Morning Rush (8-10 AM): 70% from lobby during peak
     if (hour >= 8 && hour <= 10) {
       const peakIntensity = this.getMorningRushIntensity(hour, minute);
-
       if (Math.random() < peakIntensity) {
         originFloor = 1;
         destinationFloor = this.getWeightedUpperFloor();
@@ -968,10 +809,8 @@ class SimulationEngine {
         }
       }
     }
-    // Evening Rush (5-7 PM): 70% from upper floors to lobby
     else if (hour >= 17 && hour <= 19) {
       const peakIntensity = this.getEveningRushIntensity(hour, minute);
-
       if (Math.random() < peakIntensity) {
         originFloor = this.getWeightedUpperFloor();
         destinationFloor = 1;
@@ -993,7 +832,6 @@ class SimulationEngine {
         }
       }
     }
-    // Lunch Rush (12-2 PM): Mixed traffic with mid-floor bias
     else if (hour >= 12 && hour <= 14) {
       if (Math.random() < 0.4) {
         const midFloor = Math.floor(this.config.numFloors / 2);
@@ -1014,7 +852,6 @@ class SimulationEngine {
         }
       }
     }
-    // Regular hours: Normal distribution
     else {
       originFloor = Math.floor(Math.random() * this.config.numFloors) + 1;
       destinationFloor = Math.floor(Math.random() * this.config.numFloors) + 1;
@@ -1023,7 +860,6 @@ class SimulationEngine {
           Math.floor(Math.random() * this.config.numFloors) + 1;
       }
     }
-
     this.addRequest({
       type: "floor_call",
       originFloor,
@@ -1042,15 +878,12 @@ class SimulationEngine {
       if (minute <= 45) return 0.65;
       return 0.55;
     }
-
     if (hour === 8) {
       if (minute >= 45) return 0.6;
       if (minute >= 30) return 0.5;
       return 0.4;
     }
-
     if (hour === 10 && minute <= 30) return 0.45;
-
     return 0.3;
   }
 
@@ -1060,24 +893,19 @@ class SimulationEngine {
       if (minute <= 30) return 0.65;
       return 0.55;
     }
-
     if (hour === 17) {
       if (minute >= 30) return 0.6;
       return 0.5;
     }
-
     if (hour === 19 && minute <= 30) return 0.45;
-
     return 0.3;
   }
 
   getWeightedUpperFloor() {
     const floors = [];
     const totalFloors = this.config.numFloors;
-
     for (let floor = 2; floor <= totalFloors; floor++) {
       let weight = 1;
-
       if (
         floor >= Math.floor(totalFloors * 0.4) &&
         floor <= Math.floor(totalFloors * 0.8)
@@ -1086,12 +914,10 @@ class SimulationEngine {
       } else if (floor > Math.floor(totalFloors * 0.8)) {
         weight = 2;
       }
-
       for (let w = 0; w < weight; w++) {
         floors.push(floor);
       }
     }
-
     return floors[Math.floor(Math.random() * floors.length)];
   }
 
@@ -1099,18 +925,15 @@ class SimulationEngine {
     if (hour >= 8 && hour <= 10) {
       return Math.random() < 0.8 ? 1 : 2;
     }
-
     if (hour >= 12 && hour <= 14) {
       const rand = Math.random();
       if (rand < 0.4) return 1;
       if (rand < 0.7) return 2;
       return 3;
     }
-
     if (hour >= 17 && hour <= 19) {
       return Math.random() < 0.7 ? 1 : Math.floor(Math.random() * 2) + 2;
     }
-
     return Math.floor(Math.random() * 3) + 1;
   }
 
@@ -1130,7 +953,6 @@ class SimulationEngine {
     const performanceMetrics = this.getPerformanceMetrics();
     const realTimeMetrics = this.getRealTimeMetrics();
     const assignmentCompliance = this.getAssignmentCompliance();
-
     return {
       elevators: this.elevators.map((e) => e.getStatus()),
       activeRequests: this.activeRequests.map((r) => r.getStatus()),
@@ -1147,12 +969,10 @@ class SimulationEngine {
     };
   }
 
-  // CRITICAL: Enhanced getPerformanceMetrics with debugging
   getPerformanceMetrics() {
     const metrics = this.metricsService.getPerformanceMetrics();
     const assignmentMetrics = this.metricsService.getAssignmentMetrics();
     const assignmentCompliance = this.metricsService.getAssignmentCompliance();
-
     const result = {
       ...metrics,
       assignmentMetrics: assignmentMetrics,
@@ -1160,11 +980,9 @@ class SimulationEngine {
       peakHourEfficiency: this.metricsService.calculatePeakHourEfficiency(),
       requestDistribution: this.metricsService.getRequestDistribution(),
     };
-
     if (this.debug && result.averageWaitTime > 0) {
       console.log(`Performance Metrics - Avg wait: ${result.averageWaitTime.toFixed(1)}s, Starvation: ${result.starvationCount}`);
     }
-
     return result;
   }
 
@@ -1173,7 +991,6 @@ class SimulationEngine {
       this.elevators,
       this.activeRequests
     );
-
     return {
       ...realTimeMetrics,
       assignmentMetrics: this.assignmentMetrics,
@@ -1188,7 +1005,6 @@ class SimulationEngine {
         if (allowedRuntimeChanges.includes(key)) {
           const oldValue = this.config[key];
           this.config[key] = newConfig[key];
-
           if (key === "speed") {
             if (this.debug) {
               console.log(`Updating simulation speed to ${newConfig[key]}x`);
@@ -1199,14 +1015,12 @@ class SimulationEngine {
               }
             });
           }
-
           if (key === "requestFrequency") {
             if (this.debug) {
               console.log(
                 `Request frequency changed from ${oldValue} to ${newConfig[key]}`
               );
             }
-
             if (newConfig[key] === 0) {
               if (this.requestGeneratorInterval) {
                 clearInterval(this.requestGeneratorInterval);
@@ -1215,7 +1029,6 @@ class SimulationEngine {
               if (this.debug) {
                 console.log("Automatic request generation stopped");
               }
-
               this.activeRequests = this.activeRequests.filter(
                 (r) => r.isServed || r.assignedElevator !== null
               );
@@ -1255,7 +1068,6 @@ class SimulationEngine {
       totalRequests > 0
         ? (this.assignmentMetrics.lobbyToUpperRequests / totalRequests) * 100
         : 0;
-
     return {
       lobbyTrafficPercentage,
       peakHourRequests: this.assignmentMetrics.peakHourRequests,
@@ -1265,15 +1077,90 @@ class SimulationEngine {
     };
   }
 
+  assignRequestsBasic(elevators, requests) {
+    if (this.debug) {
+      console.log(`Using basic assignment fallback for ${requests.length} requests`);
+    }
+    requests.forEach(request => {
+      if (request.assignedElevator === null || request.assignedElevator === undefined) {
+        let bestElevator = null;
+        let bestScore = Infinity;
+        elevators.forEach(elevator => {
+          if (elevator.state === 'maintenance') return;
+          const distance = Math.abs(elevator.currentFloor - request.originFloor);
+          const load = elevator.requestQueue ? elevator.requestQueue.length : 0;
+          const passengers = elevator.passengers ? elevator.passengers.length : 0;
+          const score = distance + (load * 2) + (passengers * 0.5);
+          if (score < bestScore) {
+            bestScore = score;
+            bestElevator = elevator;
+          }
+        });
+        if (bestElevator) {
+          request.assignedElevator = bestElevator.id;
+          request.assign(bestElevator.id);
+          if (this.debug) {
+            console.log(`Basic assignment: Request ${request.id} assigned to E${bestElevator.id} (score: ${bestScore.toFixed(1)})`);
+          }
+        }
+      }
+    });
+  }
+
+  sortRequestQueueScan(elevator, requestQueue) {
+    if (!requestQueue || requestQueue.length <= 1) return requestQueue;
+    const currentFloor = elevator.currentFloor;
+    const direction = elevator.direction || 'up';
+    if (this.debug) {
+      console.log(`SCAN sorting E${elevator.id} queue from floor ${currentFloor}, direction: ${direction}`);
+    }
+    const sortedQueue = [...requestQueue].sort((a, b) => {
+      if (direction === 'up') {
+        if (a >= currentFloor && b >= currentFloor) {
+          return a - b;
+        } else if (a < currentFloor && b < currentFloor) {
+          return b - a;
+        } else {
+          return (a >= currentFloor) ? -1 : 1;
+        }
+      } else {
+        if (a <= currentFloor && b <= currentFloor) {
+          return b - a;
+        } else if (a > currentFloor && b > currentFloor) {
+          return a - b;
+        } else {
+          return (a <= currentFloor) ? -1 : 1;
+        }
+      }
+    });
+    if (this.debug && sortedQueue.toString() !== requestQueue.toString()) {
+      console.log(`SCAN reordered E${elevator.id}: [${requestQueue.join(',')}] → [${sortedQueue.join(',')}]`);
+    }
+    return sortedQueue;
+  }
+
+  validateSchedulerMethods() {
+    const requiredMethods = {
+      hybrid: ['optimizeRoutes'],
+      scan: ['assignRequests', 'sortRequestQueue']
+    };
+    const currentMethods = requiredMethods[this.currentAlgorithm] || [];
+    const missingMethods = currentMethods.filter(method => 
+      typeof this.scheduler[method] !== 'function'
+    );
+    if (missingMethods.length > 0 && this.debug) {
+      console.warn(`${this.currentAlgorithm} scheduler missing methods:`, missingMethods);
+      console.warn('Using fallback implementations');
+    }
+    return missingMethods.length === 0;
+  }
+
   calculateComplianceScore() {
     let score = 100;
-
     score -= this.assignmentMetrics.starvationEvents * 10;
-
     if (this.assignmentMetrics.thirtySecondEscalations > 0) {
       score += Math.min(10, this.assignmentMetrics.thirtySecondEscalations * 2);
     }
-
     const totalDirectionalRequests =
       this.assignmentMetrics.lobbyToUpperRequests +
       this.assignmentMetrics.upperToLobbyRequests;
@@ -1283,12 +1170,10 @@ class SimulationEngine {
           totalDirectionalRequests) *
         100;
       const hour = new Date().getHours();
-
       if (hour === 9 && lobbyPercentage > 50) {
         score += 15;
       }
     }
-
     return Math.max(0, Math.min(100, score));
   }
 }

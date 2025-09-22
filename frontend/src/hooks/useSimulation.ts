@@ -8,7 +8,7 @@ import type { DirectionType } from '@/types/elevator'
 export const useSimulation = () => {
   const [isLoading, setIsLoading] = useState(false)
   const [lastUpdate, setLastUpdate] = useState(0)
-  const [hasBeenStarted, setHasBeenStarted] = useState(false) // Track if simulation was ever started
+  const [hasBeenStarted, setHasBeenStarted] = useState(false) 
 
   const {
     elevators,
@@ -29,17 +29,15 @@ export const useSimulation = () => {
     updateConfig: updateServerConfig,
   } = useWebSocket()
 
-  // FIXED: Distinguish between initial start and restart
   const handleStart = useCallback(async () => {
     if (!isConnected) return
     setIsLoading(true)
     try {
-      // Only pass config on initial start, not on restart
       if (!hasBeenStarted) {
-        startSimulation(config) // Initial start with config
+        startSimulation(config) 
         setHasBeenStarted(true)
       } else {
-        startSimulation() // Restart without config to preserve state
+        startSimulation() 
       }
     } finally {
       setTimeout(() => setIsLoading(false), 1000)
@@ -49,13 +47,12 @@ export const useSimulation = () => {
   const handleStop = useCallback(() => {
     if (!isConnected) return
     stopSimulation()
-    // Note: Don't reset hasBeenStarted here - we want to preserve it for restart
   }, [isConnected, stopSimulation])
 
   const handleReset = useCallback(() => {
     if (!isConnected) return
     resetSimulation()
-    setHasBeenStarted(false) // Reset the flag on explicit reset
+    setHasBeenStarted(false) 
   }, [isConnected, resetSimulation])
 
   const handleConfigChange = useCallback((updates: any) => {
